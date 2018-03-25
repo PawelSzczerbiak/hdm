@@ -1,0 +1,90 @@
+#!/usr/local/bin/MathematicaScript -script
+
+(* 
+	- Mathematica v10 script
+
+	- matrix element squared |M|^2 as given in Weinberg's model
+	- Bose-Einstein (BE) statistics for incoming particles
+	- Maxwell-Boltzmann (MB) statistics for outgoing particles
+
+	- Execution:
+	  ./file_name x z ACC m1 Gam1
+
+	  NOTE: make sure to set appropriate path in the first line! 
+
+    - Arguments:
+      x - scaled temperature
+      z - pseudopotential
+      ACC - accuracy
+      m1 - first scalar mass in GeV
+      Gam1 - first scalar decay rate in GeV
+      
+  	- Return:
+  	  res - computed interaction integral
+*)
+
+x = ToExpression[$ScriptCommandLine[[2]]];
+z = ToExpression[$ScriptCommandLine[[3]]];
+ACC = ToExpression[$ScriptCommandLine[[4]]];
+m1 = ToExpression[$ScriptCommandLine[[5]]];
+Gam1 = 0.001*ToExpression[$ScriptCommandLine[[6]]];
+
+mF = 0.1056;  (* fermion (muon) mass in GeV *)
+mPi = 0.13957;  (* pion mass in GeV *)
+m2 = 125; (* second scalar mass (Higgs boson) in GeV *)
+Gam2 = 0.004; (* second scalar deacy rate in GeV *)
+
+alfa = m1^2*m2^2/(m2^2 - m1^2)^2/mF^4*(m1*Gam2 - m2*Gam1)^2;
+barS = (p^2-q^2)/x^2;
+
+res = 0
+
+Which[
+	ACC == 0 
+	,
+	res = 
+	NIntegrate[(barS - 4)*barS^2*1/(1 - Exp[-p])/(Exp[p+2*z]-1)*
+	Log[(1 + Cosh[0.5*(p+q*Sqrt[1-4*x^2/(p^2-q^2)])])/(1 + Cosh[0.5*(p-q*Sqrt[1-4*x^2/(p^2-q^2)])])]*\
+	Log[(1 - Cosh[0.5*(p+q)+z])/(1 - Cosh[0.5*(p-q)+z])], 
+	{p, 2*x, Infinity}, {q, 0, Sqrt[p^2 - 4*x^2]}, MaxRecursion -> 20]
+	, 
+	ACC == 1
+	,
+	res = 
+	m1^4*m2^4/mF^8*
+	NIntegrate[(barS - 4)*(barS^2 + alfa)/((barS - m1^2/mF^2)^2 + Gam1^2*m1^2/mF^4)/
+	((barS - m2^2/mF^2)^2 + Gam2^2*m2^2/mF^4)*1/(1 - Exp[-p])/(Exp[p+2*z]-1)*
+	Log[(1 + Cosh[0.5*(p+q*Sqrt[1-4*x^2/(p^2-q^2)])])/(1 + Cosh[0.5*(p-q*Sqrt[1-4*x^2/(p^2-q^2)])])]*\
+	Log[(1 - Cosh[0.5*(p+q)+z])/(1 - Cosh[0.5*(p-q)+z])], 
+	{p, 2*x, Infinity}, {q, 0, Sqrt[p^2 - 4*x^2]}, MaxRecursion -> 20]
+	, 
+	ACC == -1
+	,
+	p = y*m1/mF*x;
+	q = Sqrt[p^2 - x^2*m1^2/mF^2];
+	res = 
+	m1^3*m2^4/mF^6/Gam1*Pi*
+	(m1^2/mF^2 - 4)*(m1^4/mF^4 + alfa)/((m1^2/mF^2 - m2^2/mF^2)^2 + Gam2^2*m2^2/mF^4)*
+	NIntegrate[
+	x^2/2/Sqrt[y^2-1]*
+	1/(1-Exp[-p])/(Exp[p+2*z]-1)*
+	Log[(1 + Cosh[0.5*(p+q*Sqrt[1-4*mF^2/m1^2])])/(1 + Cosh[0.5*(p-q*Sqrt[1-4*mF^2/m1^2])])]*\
+	Log[(1 - Cosh[0.5*(p+q)+z])/(1 - Cosh[0.5*(p-q)+z])], {y, 1, Infinity}, MaxRecursion -> 20]
+	,
+	ACC == -2 || (ACC == -3 && m1 <= 2*mPi)
+	,
+	res = 
+	Exp[-2*z]*x^4*m1^7*m2^4/mF^10/Gam1*Pi*
+	(1 - 4*mF^2/m1^2)^(3/2)*(m1^4/mF^4 + alfa)/((m1^2/mF^2 - m2^2/mF^2)^2 + Gam2^2*m2^2/mF^4)*
+	1/2/x*mF/m1*BesselK[1, (m1 x)/mF]
+	,
+	ACC == -3 && m1 > 2*mPi
+	,
+	res = 
+	Exp[-2*z]*x^4*m1^7*m2^4/mF^10/Gam1*Pi*
+	((1 - 4*mF^2/m1^2)^(3/2) + 1/27*(m1/mF)^2*(1 + 11/2*mPi^2/m1^2)^2*Sqrt[1 - 4*mPi^2/m1^2]*
+	Coth[(m1 x)/(4*mF)]^2)*(m1^4/mF^4)/((m1^2/mF^2 - m2^2/mF^2)^2 + Gam2^2*m2^2/mF^4)*
+	1/2/x*mF/m1*BesselK[1, (m1 x)/mF]
+]
+
+Export["res_BEFD_M_Weinberg.dat", Re[res]]

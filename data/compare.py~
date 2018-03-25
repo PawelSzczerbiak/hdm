@@ -1,0 +1,267 @@
+# porownojemy stara i nowa metode liczenia g, gs
+
+# nowa metoda jest "lagodniejsza"
+# interpolacja dziala OK
+
+import subprocess
+import os # http://stackoverflow.com/questions/18262293/python-open-every-file-in-a-folder
+import datetime
+import numpy as np
+import math as m
+import random
+import itertools
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib import cm
+from matplotlib.ticker import LinearLocator, FormatStrFormatter
+import matplotlib.pyplot as plt
+from pylab import *
+import scipy.special
+from scipy.interpolate import interp1d
+import scipy.integrate as integrate
+
+def dopisz(plik, tekst):
+    f = open(plik,"a")
+    f.write(tekst)
+
+
+mF = 1 # tedt barX = T
+
+# =======================================================================================================================
+
+# 0910.1066 (A3)
+def g(barX):
+	return exp(1.21 +
+	0.572*(1. + tanh((log(barX*mF) + 8.77)/0.693)) +\
+	0.330*(1. + tanh((log(barX*mF) + 2.95)/1.01)) +\
+	0.579*(1. + tanh((log(barX*mF) + 1.80)/0.165)) +\
+	0.138*(1. + tanh((log(barX*mF) + 0.162)/0.934)) +\
+	0.108*(1. + tanh((log(barX*mF) - 3.76)/0.869)))
+	
+def gs(barX):
+	return exp(1.36 +
+	0.498*(1. + tanh((log(barX*mF) + 8.74)/0.693)) +\
+	0.327*(1. + tanh((log(barX*mF) + 2.89)/1.01)) +\
+	0.579*(1. + tanh((log(barX*mF) + 1.79)/0.155)) +\
+	0.140*(1. + tanh((log(barX*mF) + 0.102)/0.963)) +\
+	0.109*(1. + tanh((log(barX*mF) - 3.82)/0.907)))
+
+def g_der(barX):
+	return exp(1.21 +
+	0.572*(1. + tanh((log(barX*mF) + 8.77)/0.693)) +\
+	0.330*(1. + tanh((log(barX*mF) + 2.95)/1.01)) +\
+	0.579*(1. + tanh((log(barX*mF) + 1.80)/0.165)) +\
+	0.138*(1. + tanh((log(barX*mF) + 0.162)/0.934)) +\
+	0.108*(1. + tanh((log(barX*mF) - 3.76)/0.869)))*\
+	((0.124281/cosh(1.15075*(-3.76 + log(barX*mF)))**2) +\
+	(0.147752/cosh(1.07066*(0.162 + log(barX*mF)))**2) +\
+	(3.50909/cosh(6.06061*(1.8 + log(barX*mF)))**2) +\
+	(0.326733/cosh(0.990099*(2.95 + log(barX*mF)))**2) +\
+	(0.825397/cosh(1.443*(8.77 + log(barX*mF)))**2))/barX
+
+def g_der_over_g(barX): # g'/g
+	return 	((0.124281/cosh(1.15075*(-3.76 + log(barX*mF)))**2) +\
+	(0.147752/cosh(1.07066*(0.162 + log(barX*mF)))**2) +\
+	(3.50909/cosh(6.06061*(1.8 + log(barX*mF)))**2) +\
+	(0.326733/cosh(0.990099*(2.95 + log(barX*mF)))**2) +\
+	(0.825397/cosh(1.443*(8.77 + log(barX*mF)))**2))/barX
+	
+def gs_der(barX):
+	return exp(1.36 +
+	0.498*(1. + tanh((log(barX*mF) + 8.74)/0.693)) +\
+	0.327*(1. + tanh((log(barX*mF) + 2.89)/1.01)) +\
+	0.579*(1. + tanh((log(barX*mF) + 1.79)/0.155)) +\
+	0.140*(1. + tanh((log(barX*mF) + 0.102)/0.963)) +\
+	0.109*(1. + tanh((log(barX*mF) - 3.82)/0.907)))*\
+	((0.120176/cosh(1.10254*(-3.82 + log(barX*mF)))**2) +\
+	(0.145379/cosh(1.03842*(0.102 + log(barX*mF)))**2) +\
+	(3.73548/cosh(6.45161*(1.79 + log(barX*mF)))**2) +\
+	(0.323762/cosh(0.990099*(2.89 + log(barX*mF)))**2) +\
+	(0.718615/cosh(1.443*(8.74 + log(barX*mF)))**2))/barX
+
+def gs_der_over_gs(barX): # gs'/gs
+	return ((0.120176/cosh(1.10254*(-3.82 + log(barX*mF)))**2) +\
+	(0.145379/cosh(1.03842*(0.102 + log(barX*mF)))**2) +\
+	(3.73548/cosh(6.45161*(1.79 + log(barX*mF)))**2) +\
+	(0.323762/cosh(0.990099*(2.89 + log(barX*mF)))**2) +\
+	(0.718615/cosh(1.443*(8.74 + log(barX*mF)))**2))/barX
+	
+#=============================================================================================================================================================
+
+# 1503.03513
+h_T_vec = []
+h_val_vec = []
+h_val_OLD_vec = []
+for lines in open("heffdhs.dat"):
+	e=lines.split('\t')
+	T = float(e[0])
+	h_T_vec.append(T)
+	h_val_vec.append(float(e[1]))
+	if T == 0:
+		T = 0.00001
+	h_val_OLD_vec.append(gs(T))
+g_T_vec = []
+g_val_vec = []
+g_val_OLD_vec = []
+for lines in open("geffdhs.dat"):
+	e=lines.split('\t')
+	T = float(e[0])
+	g_T_vec.append(T)
+	g_val_vec.append(float(e[1]))
+	if T == 0:
+		T = 0.00001
+	g_val_OLD_vec.append(g(T))
+gstar_T_vec = []
+gstar_val_vec = []
+gstar_val_OLDg_vec = []
+gstar_val_OLDgs_vec = []
+for lines in open("gstardhs.dat"):
+	e=lines.split('\t')
+	T = float(e[0])
+	gstar_T_vec.append(T)
+	gstar_val_vec.append(float(e[1]))
+	if T == 0:
+		T = 0.00001
+	gstar_val_OLDg_vec.append(gs(T)/sqrt(g(T))*(1. + T/4.*g_der_over_g(T)))
+	gstar_val_OLDgs_vec.append(gs(T)/sqrt(g(T))*(1. + T/3.*gs_der_over_gs(T)))
+
+gs_der_over_gs_NEW = []
+gs_der_over_gs_OLD = []
+for i in range(len(gstar_T_vec)):
+	T = gstar_T_vec[i]
+	if T == 0:
+		T = 0.00001
+	gs_der_over_gs_NEW.append(3./T*(gstar_val_vec[i]*sqrt(g_val_vec[i])/h_val_vec[i] - 1.))
+	gs_der_over_gs_OLD.append(gs_der_over_gs(T))
+
+#=============================================================================================================================================================
+
+# interpolacja 
+T_vec = np.linspace(0.0001,0.5,500)
+
+# dane wejsciowe musza byc w kolejnosci rosnacej 
+h_fun = interp1d(h_T_vec[::-1], h_val_vec[::-1], kind='cubic')
+g_fun = interp1d(g_T_vec[::-1], g_val_vec[::-1], kind='cubic')
+gstar_fun = interp1d(gstar_T_vec[::-1], gstar_val_vec[::-1], kind='cubic')
+gs_der_over_gs_fun = interp1d(gstar_T_vec[::-1], gs_der_over_gs_NEW[::-1])#, kind='cubic')
+
+h_interp = []
+g_interp = []
+gstar_interp = []
+gs_der_over_gs_interp = []
+
+for T in T_vec:
+	h_interp.append(h_fun(T))
+	g_interp.append(g_fun(T))
+	gstar_interp.append(gstar_fun(T))
+	gs_der_over_gs_interp.append(gs_der_over_gs_fun(T))
+	
+plt.figure
+plt.plot(h_T_vec, h_val_vec, color='b')
+plt.plot(g_T_vec, g_val_vec, color='r')
+plt.plot(T_vec, h_interp, color='b',linestyle=':')
+plt.plot(T_vec, g_interp, color='r',linestyle=':')
+plt.plot(h_T_vec, h_val_OLD_vec, color='b',linestyle='--')
+plt.plot(g_T_vec, g_val_OLD_vec, color='r',linestyle='--')
+plt.grid(b=True, which='major', color='k', linestyle=':')
+plt.grid(b=True, which='minor', color='k', linestyle=':', alpha=0.5)
+plt.xlim(3e-5,1e4)
+#plt.xlim(0.01,0.3)
+#plt.ylim(0,90)
+ax = plt.gca()
+ax.set_xscale('log')
+ax.get_yaxis().set_tick_params(which='both', direction='out')
+ax.get_xaxis().set_tick_params(which='both', direction='out')
+plt.minorticks_on()
+plt.savefig("hg_compare.pdf")
+plt.close()	
+
+plt.figure
+plt.plot(h_T_vec, h_val_vec, color='b')
+plt.plot(g_T_vec, g_val_vec, color='r')
+plt.plot(T_vec, h_interp, color='b',linestyle=':')
+plt.plot(T_vec, g_interp, color='r',linestyle=':')
+plt.plot(h_T_vec, h_val_OLD_vec, color='b',linestyle='--')
+plt.plot(g_T_vec, g_val_OLD_vec, color='r',linestyle='--')
+plt.grid(b=True, which='major', color='k', linestyle=':')
+plt.grid(b=True, which='minor', color='k', linestyle=':', alpha=0.5)
+plt.xlim(3e-5,1e4)
+plt.xlim(0.01,0.3)
+plt.ylim(0,90)
+ax = plt.gca()
+#ax.set_xscale('log')
+ax.get_yaxis().set_tick_params(which='both', direction='out')
+ax.get_xaxis().set_tick_params(which='both', direction='out')
+plt.minorticks_on()
+plt.savefig("hg_small_compare.pdf")
+plt.close()	
+
+plt.figure
+plt.plot(gstar_T_vec, gstar_val_vec, color='k')
+plt.plot(T_vec, gstar_interp, color='k',linestyle=':')
+plt.plot(gstar_T_vec, gstar_val_OLDgs_vec, color='k',linestyle='--')
+plt.plot(gstar_T_vec, gstar_val_OLDg_vec, color='brown',linestyle='--')
+plt.grid(b=True, which='major', color='k', linestyle=':')
+plt.grid(b=True, which='minor', color='k', linestyle=':', alpha=0.5)
+plt.xlim(3e-5,1e4)
+#plt.xlim(0.01,0.3)
+#plt.ylim(0,90)
+ax = plt.gca()
+ax.set_xscale('log')
+ax.get_yaxis().set_tick_params(which='both', direction='out')
+ax.get_xaxis().set_tick_params(which='both', direction='out')
+plt.minorticks_on()
+plt.savefig("gstar_compare.pdf")
+plt.close()	
+
+plt.figure
+plt.plot(gstar_T_vec, gstar_val_vec, color='k')
+plt.plot(T_vec, gstar_interp, color='k',linestyle=':')
+plt.plot(gstar_T_vec, gstar_val_OLDgs_vec, color='k',linestyle='--')
+plt.plot(gstar_T_vec, gstar_val_OLDg_vec, color='brown',linestyle='--')
+plt.grid(b=True, which='major', color='k', linestyle=':')
+plt.grid(b=True, which='minor', color='k', linestyle=':', alpha=0.5)
+plt.xlim(3e-5,1e4)
+plt.xlim(0.01,0.3)
+plt.ylim(0,20)
+ax = plt.gca()
+#ax.set_xscale('log')
+ax.get_yaxis().set_tick_params(which='both', direction='out')
+ax.get_xaxis().set_tick_params(which='both', direction='out')
+plt.minorticks_on()
+plt.savefig("gstar_small_compare.pdf")
+plt.close()	
+
+plt.figure
+plt.plot(gstar_T_vec, gs_der_over_gs_NEW, color='k')
+plt.plot(T_vec, gs_der_over_gs_interp, color='k',linestyle=':')
+plt.plot(gstar_T_vec, gs_der_over_gs_OLD, color='k',linestyle='--')
+plt.grid(b=True, which='major', color='k', linestyle=':')
+plt.grid(b=True, which='minor', color='k', linestyle=':', alpha=0.5)
+plt.xlim(3e-5,1e4)
+#plt.xlim(0.01,0.3)
+#plt.ylim(0,90)
+ax = plt.gca()
+ax.set_xscale('log')
+ax.get_yaxis().set_tick_params(which='both', direction='out')
+ax.get_xaxis().set_tick_params(which='both', direction='out')
+plt.minorticks_on()
+plt.savefig("gsder_compare.pdf")
+plt.close()	
+
+plt.figure
+plt.plot(gstar_T_vec, gs_der_over_gs_NEW, color='k')
+plt.plot(T_vec, gs_der_over_gs_interp, color='k',linestyle=':')
+plt.plot(gstar_T_vec, gs_der_over_gs_OLD, color='k',linestyle='--')
+plt.grid(b=True, which='major', color='k', linestyle=':')
+plt.grid(b=True, which='minor', color='k', linestyle=':', alpha=0.5)
+plt.xlim(3e-5,1e4)
+plt.xlim(0.0001,0.3)
+plt.ylim(0,20)
+ax = plt.gca()
+#ax.set_xscale('log')
+ax.get_yaxis().set_tick_params(which='both', direction='out')
+ax.get_xaxis().set_tick_params(which='both', direction='out')
+plt.minorticks_on()
+plt.savefig("gsder_small_compare.pdf")
+plt.close()	
+

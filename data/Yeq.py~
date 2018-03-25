@@ -1,0 +1,190 @@
+import subprocess
+import os # http://stackoverflow.com/questions/18262293/python-open-every-file-in-a-folder
+import datetime
+import numpy as np
+import math as m
+import random
+import itertools
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib import cm
+from matplotlib.ticker import LinearLocator, FormatStrFormatter
+import matplotlib.pyplot as plt
+from pylab import *
+import scipy.special
+from scipy.interpolate import interp1d
+import scipy.integrate as integrate
+from scipy.optimize import fsolve
+
+def dopisz(plik, tekst):
+    f = open(plik,"a")
+    f.write(tekst)
+    
+start = datetime.datetime.now()
+zeta_3 = 1.20206 # stala Eulera zeta(3)
+Mpl = 1.2209e19 # masa Plancka w GeV
+mF = 0.1056  # masa fermionu w GeV (mion)
+Cz = sqrt(45.)/128./pow(pi,4.5)*Mpl/mF
+Cz_MB = sqrt(45.)/512./pow(pi,4.5)*Mpl/mF
+CY = 1./sqrt(45.*pi)/512.*Mpl/mF
+CY_pBE = 1./sqrt(45.*pi)/512./zeta_3**2*Mpl/mF # pBE = partial BE
+CY_pFD = 1./sqrt(45.*pi)/512./zeta_3**2*Mpl/mF/(3./4.)**2 # pFD = partial FD
+
+
+# Metoda OLD
+
+# 0910.1066 (A3) =================================================== 
+def g(barX):
+	return exp(1.21 +
+	0.572*(1. + tanh((log(barX*mF) + 8.77)/0.693)) +\
+	0.330*(1. + tanh((log(barX*mF) + 2.95)/1.01)) +\
+	0.579*(1. + tanh((log(barX*mF) + 1.80)/0.165)) +\
+	0.138*(1. + tanh((log(barX*mF) + 0.162)/0.934)) +\
+	0.108*(1. + tanh((log(barX*mF) - 3.76)/0.869)))
+	
+def gs(barX):
+	return exp(1.36 +
+	0.498*(1. + tanh((log(barX*mF) + 8.74)/0.693)) +\
+	0.327*(1. + tanh((log(barX*mF) + 2.89)/1.01)) +\
+	0.579*(1. + tanh((log(barX*mF) + 1.79)/0.155)) +\
+	0.140*(1. + tanh((log(barX*mF) + 0.102)/0.963)) +\
+	0.109*(1. + tanh((log(barX*mF) - 3.82)/0.907)))
+
+def g_der(barX):
+	return exp(1.21 +
+	0.572*(1. + tanh((log(barX*mF) + 8.77)/0.693)) +\
+	0.330*(1. + tanh((log(barX*mF) + 2.95)/1.01)) +\
+	0.579*(1. + tanh((log(barX*mF) + 1.80)/0.165)) +\
+	0.138*(1. + tanh((log(barX*mF) + 0.162)/0.934)) +\
+	0.108*(1. + tanh((log(barX*mF) - 3.76)/0.869)))*\
+	((0.124281/cosh(1.15075*(-3.76 + log(barX*mF)))**2) +\
+	(0.147752/cosh(1.07066*(0.162 + log(barX*mF)))**2) +\
+	(3.50909/cosh(6.06061*(1.8 + log(barX*mF)))**2) +\
+	(0.326733/cosh(0.990099*(2.95 + log(barX*mF)))**2) +\
+	(0.825397/cosh(1.443*(8.77 + log(barX*mF)))**2))/barX
+
+def g_der_over_g(barX): # g'/g
+	return 	((0.124281/cosh(1.15075*(-3.76 + log(barX*mF)))**2) +\
+	(0.147752/cosh(1.07066*(0.162 + log(barX*mF)))**2) +\
+	(3.50909/cosh(6.06061*(1.8 + log(barX*mF)))**2) +\
+	(0.326733/cosh(0.990099*(2.95 + log(barX*mF)))**2) +\
+	(0.825397/cosh(1.443*(8.77 + log(barX*mF)))**2))/barX
+	
+def gs_der(barX):
+	return exp(1.36 +
+	0.498*(1. + tanh((log(barX*mF) + 8.74)/0.693)) +\
+	0.327*(1. + tanh((log(barX*mF) + 2.89)/1.01)) +\
+	0.579*(1. + tanh((log(barX*mF) + 1.79)/0.155)) +\
+	0.140*(1. + tanh((log(barX*mF) + 0.102)/0.963)) +\
+	0.109*(1. + tanh((log(barX*mF) - 3.82)/0.907)))*\
+	((0.120176/cosh(1.10254*(-3.82 + log(barX*mF)))**2) +\
+	(0.145379/cosh(1.03842*(0.102 + log(barX*mF)))**2) +\
+	(3.73548/cosh(6.45161*(1.79 + log(barX*mF)))**2) +\
+	(0.323762/cosh(0.990099*(2.89 + log(barX*mF)))**2) +\
+	(0.718615/cosh(1.443*(8.74 + log(barX*mF)))**2))/barX
+
+def gs_der_over_gs(barX): # gs'/gs
+	return ((0.120176/cosh(1.10254*(-3.82 + log(barX*mF)))**2) +\
+	(0.145379/cosh(1.03842*(0.102 + log(barX*mF)))**2) +\
+	(3.73548/cosh(6.45161*(1.79 + log(barX*mF)))**2) +\
+	(0.323762/cosh(0.990099*(2.89 + log(barX*mF)))**2) +\
+	(0.718615/cosh(1.443*(8.74 + log(barX*mF)))**2))/barX
+	
+# Metoda NEW 
+# - uzywamy g_fun zamiast g itd.
+# - argumentem jest T = xBar*mF zamiast xBar
+# # 1503.03513 =====================================================
+
+# pobieramy dane z plikow
+h_T_vec = []
+h_val_vec = []
+for lines in open("/home/pawel/Dropbox/NUM_INT/IMPROVED_heff/heffdhs.dat"):
+	e=lines.split('\t')
+	h_T_vec.append(float(e[0]))
+	h_val_vec.append(float(e[1]))
+	
+g_T_vec = []
+g_val_vec = []
+for lines in open("/home/pawel/Dropbox/NUM_INT/IMPROVED_heff/geffdhs.dat"):
+	e=lines.split('\t')
+	g_T_vec.append(float(e[0]))
+	g_val_vec.append(float(e[1]))
+
+gstar_T_vec = []
+gstar_val_vec = []
+for lines in open("/home/pawel/Dropbox/NUM_INT/IMPROVED_heff/gstardhs.dat"):
+	e=lines.split('\t')
+	gstar_T_vec.append(float(e[0]))
+	gstar_val_vec.append(float(e[1]))
+
+gs_der_over_gs_NEW = []
+for i in range(len(gstar_T_vec)):
+	T = gstar_T_vec[i]
+	if T == 0: T = 0.00001
+	gs_der_over_gs_NEW.append(3.*mF/T*(gstar_val_vec[i]*sqrt(g_val_vec[i])/h_val_vec[i] - 1.))
+	
+# interpolacja 
+T_vec = np.linspace(0.0001,0.5,500)
+# dane wejsciowe musza byc w kolejnosci rosnacej 
+g_fun = interp1d(g_T_vec[::-1], g_val_vec[::-1], kind='cubic')
+gs_fun = interp1d(h_T_vec[::-1], h_val_vec[::-1], kind='cubic')
+#gstar_fun = interp1d(gstar_T_vec[::-1], gstar_val_vec[::-1], kind='cubic')
+gs_der_over_gs_fun = interp1d(gstar_T_vec[::-1], gs_der_over_gs_NEW[::-1], kind='cubic')
+
+
+# Porownanie metod
+print gs_der_over_gs_fun(0.15), gs_der_over_gs(0.15/mF)
+
+#=============================================================================================================================================================
+
+def Y_eq_MB(barX):
+	return 22.5/pow(m.pi,4)/gs_fun(barX*mF)
+	
+def Y_eq_BE(barX): # uwzglednienie statystyki BE
+	return 22.5/pow(m.pi,4)/gs_fun(barX*mF)*zeta_3
+
+def Y_eq_FD(barX): # uwzglednienie statystyki FD
+	return 22.5/pow(m.pi,4)/gs_fun(barX*mF)*zeta_3*3./4.
+
+# BE oznacza czastki wejsciowe wiec zgadza sie dla BEFD i BE
+def Y_BE(z,barX): # uwzglednienie statystyki BE
+	integral = lambda y: y**2/(m.exp(y+z)-1.)
+	return Y_eq_MB(barX)/2.*integrate.quad(integral,0,100)[0] # granica !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+# FD oznacza czastki wejsciowe wiec zgadza sie dla FDBE i FD
+def Y_FD(z,barX): # uwzglednienie statystyki BE
+	integral = lambda y: y**2/(m.exp(y+z)+1.)
+	return Y_eq_MB(barX)/2.*integrate.quad(integral,0,100)[0] # granica !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+#=============================================================================================================================================================
+
+Y_eq_BE_vec = []
+Y_eq_FD_vec = []
+
+barX_0 =100
+h = -0.01 # -0.005 liczy 0.5h
+barX_vec = np.arange(barX_0,0.01,h) # barX = T/mF (idziemy od duzych do malych wartosci)
+	
+for i in range(len(barX_vec)): # omijamy pierwszy element
+	barX = barX_vec[i]    # bierzemy poprzedni krok
+	Y_eq_BE_vec.append(Y_eq_BE(barX))
+	Y_eq_FD_vec.append(Y_eq_FD(barX))
+
+plt.figure
+plt.plot(barX_vec,Y_eq_BE_vec,color='g',label=r'$Y^\mathrm{eq}_{\mathrm{MB}}(\bar{x})$')
+plt.plot(barX_vec,Y_eq_FD_vec,color='r',label=r'$Y^\mathrm{eq}_{\mathrm{MB}}(\bar{x})$')
+plt.legend(loc=1)
+plt.xlim([0.,barX_0])
+plt.ylim([0.002,0.03])
+#plt.xlim([0.,max(barX_vec)])
+#plt.ylim([min(res),max(res)])
+plt.xlabel(r'$\bar{x}=T/m_F$',fontsize=18)
+plt.ylabel(r'$Y(\bar{x})$',fontsize=18)
+#plt.yscale('log')
+plt.grid(b=True, which='major', color='k', linestyle=':')
+plt.grid(b=True, which='minor', color='k', linestyle=':', alpha=0.5)
+ax = plt.gca()
+ax.get_yaxis().set_tick_params(which='both', direction='out')
+ax.get_xaxis().set_tick_params(which='both', direction='out')
+plt.minorticks_on()
+plt.savefig("Yeq.png")
+plt.close()	
