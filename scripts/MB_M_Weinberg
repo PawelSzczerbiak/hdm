@@ -59,6 +59,7 @@ Which[
 	,
 	ACC == -3 && m1 > 2*mPi
 	,
+	(* additional annihilation into pion pair *)
 	res = 
 	m1^3*m2^4/mF^6/Gam1*Pi*barS^(3/2)*
 	((1 - 4*mF^2/m1^2)^(3/2) + 1/27*(m1/mF)^2*(1 + 11/2*mPi^2/m1^2)^2*Sqrt[1 - 4*mPi^2/m1^2])*
