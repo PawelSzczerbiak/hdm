@@ -53,6 +53,7 @@ for m1 in m1_vec:
     calc_interp = 1 # whether or not to perform interpolation for MB and pBE approximations 
     for kappa in kappa_vec: 
         # Perform calculation
+        print("\nScan for m1 = %s, kappa = %s\n" % (m1, kappa))
         command = join_line(["python RK4-solver.py", scan, ACC, lam_phi, kappa, m1, calc_interp, GG])
         os.system(command)
         # Update info file

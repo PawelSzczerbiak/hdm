@@ -48,6 +48,6 @@ def read_columns_as_rows(path, columns, sep='\t', format=float):
             res.append([elements[i] for i in columns])
     return np.asarray(res).transpose().astype(format)
 # Note: in the approach below the whole file is read 
-#       but is more elastic i.e. columns may be a list or an integer
+# but is more elastic i.e. columns may be list or integer
 #         res.append(line.split(sep))
 # return np.asarray(res)[:, columns].astype(format)
