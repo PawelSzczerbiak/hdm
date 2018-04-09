@@ -247,12 +247,48 @@ class RK4_Solver_BEFD(object):
         self.barXs = barXs
         self.z_0 = z_0
 
+    # Main function
+
     def calculate(self):
-        # Pseudopotential to be calculated
-        self.z_ = [z_0]
-        for barX in barXs:
-            self.z_.append(barX)
-        return self
+        z_BE = self.z_0 # first step
+        self.z_ = [z_BE] # pseudopotential vector (to be calculated)
+        for i in range(len(self.barXs) - 1):
+            barX_prev = self.barXs[i] # previous step
+
+            k1 = self.calc_k(z_BE, barX_prev) 
+            k2 = self.calc_k(z_BE + h / 2 * k1, barX_prev + h / 2) 
+            k3 = self.calc_k(z_BE + h / 2 * k2, barX_prev + h / 2) 
+            k4 = self.calc_k(z_BE + h * k3, barX_prev + h) 
+
+            print(i, k1, k2, k3, k4)
+            z_BE = z_BE + h / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+            self.z_.append(z_BE)
+
+    # Helper functions
+
+    def calc_k(self, z, barX):
+        '''
+        Calculates k coefficient for RK4 method
+        '''
+        try:
+            # Mathematica script execution for BEFD
+            command = join_line(['cd', path_scripts, ';', './BEFD_M_Weinberg', 1/barX, z, self.ACC, self.m1, self.Gam1])
+            os.system(command)
+            with open(path_scripts+'res_BEFD_M_Weinberg.dat', 'r') as f: 
+                barS_BE = (float(f.readline()))
+        except:
+            barS_BE = None
+        return self.fun_z_BE(z, barX, coeff * barS_BE) if barS_BE else 0
+        
+    def fun_z_BE(self, z, barX, barS_BE):
+        ''' 
+        z' = fun_z_BE(z,barX,barS_BE) 
+        BE is related to incoming particles
+        Function works for BEFD and BEBE statistics
+        '''
+        return (-gs_der_over_gs_fun(barX * mF) / 3 / barX * self.barJ_BE(z, barX, 3) \
+        + Cz * barX / m.sqrt(g_fun(barX * mF)) * m.sinh(z) * barS_BE \
+        * (1 + barX / 3 * gs_der_over_gs_fun(barX * mF))) / self.barJ_BE(z, barX, 2)
 
     def barJ_BE(self, z, barX, n):
         ''' 
@@ -261,16 +297,6 @@ class RK4_Solver_BEFD(object):
         '''
         integral = lambda y: barX**(n + 1) * y**n * m.exp(y) / (m.exp(y + z) - 1)**2
         return integrate.quad(integral, 0, 100)[0] # limit !!!!!!
-        
-    def fun_z_BE(self, z, barX, barS_BE):
-        ''' 
-        z' = fun_z_BE(z,barX,barS_BE) 
-        BE is related to incoming particles
-        Function works for BEFD and BEBE statistics
-        '''
-        return (-gs_der_over_gs_fun(barX*mF)/3./barX*barJ_BE(z,barX,3)+\
-        Cz*barX/m.sqrt(g_fun(barX*mF))*m.sinh(z)*barS_BE*\
-        (1.+barX/3.*gs_der_over_gs_fun(barX*mF)))/barJ_BE(z,barX,2)
 
 S1 = RK4_Solver_BEFD(ACC, m1, Gam1, barXs)
 S1.calculate()
