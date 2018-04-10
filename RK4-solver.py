@@ -60,8 +60,8 @@ CY_pBE = 1 / m.sqrt(45 * m.pi) / 512 * Mpl / mF
 Gam1 = lam_phi*m1/16/m.pi*1000 # first scalar decay rate in GeV
 coeff = 2*kappa**2*mF**8/m1**4/m2**4 # coefficient in |M|^2
 barX_0 = 4 # barX = T_max / mF, starting moment for calculation
-h = -0.05 # barX step
-barX_end = 0.1 # ending moment for calculation
+h = -0.2# -0.05 # barX step
+barX_end = 3 # ending moment for calculation
 
 # Paths
 
@@ -119,24 +119,6 @@ gs_der_over_gs_fun = interp1d(temps[::-1], gs_der_over_gs[::-1], kind='cubic')
 
 # Note: they require gs_fun() and gs_der_over_gs_fun() functions
 
-def fun_z_MB(z, barX, barS_MB):
-    ''' z' = fun_z_MB(z,barX,barS_MB) '''
-    return -gs_der_over_gs_fun(barX*mF)+\
-    Cz_MB*m.sinh(z)/m.pow(barX,5)*barS_MB*\
-    (1.+barX/3.*gs_der_over_gs_fun(barX*mF))/m.sqrt(g_fun(barX*mF))
-
-def fun_z_fBE(z, barX, barS_MB):
-    ''' z' = fun_z_fBE(z,barX,barS_MB) '''
-    return -gs_der_over_gs_fun(barX*mF)+\
-    Cz_MB*m.sinh(z)/m.pow(barX,5)*barS_MB*zeta_3*\
-    (1.+barX/3.*gs_der_over_gs_fun(barX*mF))/m.sqrt(g_fun(barX*mF))
-
-def fun_z_pBE(z, barX, barS_pBE):
-    ''' z' = fun_z_pBE(z,barX,barS_pBE) '''
-    return -gs_der_over_gs_fun(barX*mF)+\
-    Cz_MB*m.sinh(z)/m.pow(barX,5)*barS_pBE*zeta_3*\
-    (1.+barX/3.*gs_der_over_gs_fun(barX*mF))/m.sqrt(g_fun(barX*mF))
-
 def fun_z_MB_odeint(z, barX):
     ''' z' = fun_z_MB_odeint(z,barX) '''
     return -gs_der_over_gs_fun(barX*mF)+\
@@ -169,7 +151,7 @@ barXs_nodes = []
 nodes_MB = []
 nodes_pBE = []
 
-file_nodes = path_results+"interp_"+str(m1)+"_"+str(lam_phi)+"_"+str(int(ACC))
+file_nodes = path_results + "interp_" + str(m1) + "_" + str(lam_phi) + "_" + str(int(ACC))
 
 # Interpolate if flag is 1 or file does not exist
 if calc_interp == 1 or not os.path.isfile(file_nodes):
@@ -215,7 +197,7 @@ print("Node calculation time: %s" % (end_nodes - start))
 # RK4 solution for BEFD statistics
 #===================================
 
-print("\nOdeint solution for pure MB approximation")
+print("\nOdeint solution for MB...")
 
 z_0 = 0
 barX_odeint = np.linspace(barX_0, barX_end, 1000) # descending order
@@ -232,13 +214,26 @@ for i, z in enumerate(z_odeint):
 
 print("BarX_0 = %.3f, z_0 = %.3f" % (barX_0, z_0))
 
+print("\nMathematica solution for BEFD, MB, fBE, pBE...")
+
 barXs = np.arange(barX_0, barX_end, h) # descending order
 
-class RK4_Solver_BEFD(object):
+class RK4_Solver(object):
     '''
     Class which solves Boltzmann equation for pseudopotential z(barX)
-    in S. Weinberg's model for BEFD statistics.
+    in S. Weinberg's model for BEFD case and MB, fBE, pBE approximations.
     Method: Runge-Kutta, 4th order.
+    
+    Parameters:
+    - ACC: accuracy for Mathematica script (BEFD)
+    - m1: first scalar's mass in GeV
+    - Gam1: first scalar's decay rate in GeV
+    - barXs: array of barX's (barX = T / mF)
+    - z_0: pseudopotential for barXs[0]
+
+    Requires:
+    - global parameters: mF, coeff, Cz, Cz_MB, path_scripts
+    - global functions: g_fun, gs_der_over_gs_fun, barS_MB_interp, barS_pBE_interp
     '''
     def __init__(self, ACC, m1, Gam1, barXs, z_0=0):
         self.ACC = ACC
@@ -250,26 +245,37 @@ class RK4_Solver_BEFD(object):
     # Main function
 
     def calculate(self):
-        z_BE = self.z_0 # first step
-        self.z_ = [z_BE] # pseudopotential vector (to be calculated)
+        '''
+        Calculates pseudopotential for BEFD, MB, fBE, fBE
+        '''
+        # first step
+        z_BE, z_MB, z_fBE, z_pBE = np.full(4, self.z_0)
+        self.z_ = [[z_BE, z_MB, z_fBE, z_pBE]]
+        # nex steps
         for i in range(len(self.barXs) - 1):
             barX_prev = self.barXs[i] # previous step
 
-            k1 = self.calc_k(z_BE, barX_prev) 
-            k2 = self.calc_k(z_BE + h / 2 * k1, barX_prev + h / 2) 
-            k3 = self.calc_k(z_BE + h / 2 * k2, barX_prev + h / 2) 
-            k4 = self.calc_k(z_BE + h * k3, barX_prev + h) 
+            z_BE = self.calc_z(z_BE, barX_prev, self.calc_k_BEFD)
+            z_MB = self.calc_z(z_MB, barX_prev, self.calc_k_MB)
+            z_fBE = self.calc_z(z_fBE, barX_prev, self.calc_k_fBE)
+            z_pBE = self.calc_z(z_pBE, barX_prev, self.calc_k_pBE)
 
-            print(i, k1, k2, k3, k4)
-            z_BE = z_BE + h / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
-            self.z_.append(z_BE)
+            zs = [z_BE, z_MB, z_fBE, z_pBE]
+            print(i, zs) # print all simultanously (important for checking results on the flow)
+            self.z_.append(zs)
 
     # Helper functions
 
-    def calc_k(self, z, barX):
-        '''
-        Calculates k coefficient for RK4 method
-        '''
+    def calc_z(self, z, barX, calc_k):
+        ''' Calculates k coefficients for RK4 method '''
+        k1 = calc_k(z, barX) 
+        k2 = calc_k(z + h / 2 * k1, barX + h / 2)
+        k3 = calc_k(z + h / 2 * k2, barX + h / 2)
+        k4 = calc_k(z + h * k3, barX + h)
+        return z + h / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+
+    def calc_k_BEFD(self, z, barX):
+        ''' Calculates k coefficient for BEFD '''
         try:
             # Mathematica script execution for BEFD
             command = join_line(['cd', path_scripts, ';', './BEFD_M_Weinberg', 1/barX, z, self.ACC, self.m1, self.Gam1])
@@ -279,10 +285,25 @@ class RK4_Solver_BEFD(object):
         except:
             barS_BE = None
         return self.fun_z_BE(z, barX, coeff * barS_BE) if barS_BE else 0
+
+    def calc_k_MB(self, z, barX):
+        ''' Calculates k coefficient for MB '''
+        barS_MB = barS_MB_interp(barX)
+        return self.fun_z_MB(z, barX, coeff * barS_MB)
+
+    def calc_k_fBE(self, z, barX):
+        ''' Calculates k coefficient for fBE '''
+        barS_fBE = barS_MB_interp(barX)
+        return self.fun_z_fBE(z, barX, coeff * barS_fBE)
+
+    def calc_k_pBE(self, z, barX):
+        ''' Calculates k coefficient for fBE '''
+        barS_pBE = barS_pBE_interp(barX)
+        return self.fun_z_pBE(z, barX, coeff * barS_pBE)
         
     def fun_z_BE(self, z, barX, barS_BE):
         ''' 
-        z' = fun_z_BE(z,barX,barS_BE) 
+        z' = fun_z_BE(z, barX, barS_BE) 
         BE is related to incoming particles
         Function works for BEFD and BEBE statistics
         '''
@@ -298,6 +319,24 @@ class RK4_Solver_BEFD(object):
         integral = lambda y: barX**(n + 1) * y**n * m.exp(y) / (m.exp(y + z) - 1)**2
         return integrate.quad(integral, 0, 100)[0] # limit !!!!!!
 
-S1 = RK4_Solver_BEFD(ACC, m1, Gam1, barXs)
-S1.calculate()
+    def fun_z_MB(self, z, barX, barS_MB):
+        ''' z' = fun_z_MB(z, barX, barS_MB) '''
+        return -gs_der_over_gs_fun(barX * mF) \
+        + Cz_MB * m.sinh(z) / m.pow(barX, 5) * barS_MB \
+        * (1 + barX / 3 * gs_der_over_gs_fun(barX * mF)) / m.sqrt(g_fun(barX * mF))
+
+    def fun_z_fBE(self, z, barX, barS_MB):
+        ''' z' = fun_z_fBE(z, barX, barS_MB) '''
+        return -gs_der_over_gs_fun(barX * mF) \
+        + Cz_MB * m.sinh(z) / m.pow(barX, 5) * barS_MB * zeta_3 \
+        * (1 + barX / 3 * gs_der_over_gs_fun(barX * mF)) / m.sqrt(g_fun(barX * mF))
+
+    def fun_z_pBE(self, z, barX, barS_pBE):
+        ''' z' = fun_z_pBE(z, barX, barS_pBE) '''
+        return -gs_der_over_gs_fun(barX * mF) \
+        + Cz_MB * m.sinh(z) / m.pow(barX, 5) * barS_pBE * zeta_3 \
+        * (1 + barX / 3 * gs_der_over_gs_fun(barX * mF)) / m.sqrt(g_fun(barX * mF))
+
+S = RK4_Solver(ACC, m1, Gam1, barXs)
+S.calculate()
 print(S1.z_)
