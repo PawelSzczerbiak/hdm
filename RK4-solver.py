@@ -57,11 +57,11 @@ Cz_MB = m.sqrt(45) / 512 / pow(m.pi, 4.5) * Mpl / mF
 CY = 1 / m.sqrt(45 * m.pi) / 512 * Mpl / mF
 CY_pBE = 1 / m.sqrt(45 * m.pi) / 512 * Mpl / mF
 
-Gam1 = lam_phi*m1/16/m.pi*1000 # first scalar decay rate in GeV
-coeff = 2*kappa**2*mF**8/m1**4/m2**4 # coefficient in |M|^2
+Gam1 = lam_phi * m1 / 16 / m.pi * 1000 # first scalar decay rate in GeV
+coeff = 2 * kappa**2 * mF**8 / m1**4 / m2**4 # coefficient in |M|^2
 barX_0 = 4 # barX = T_max / mF, starting moment for calculation
-h = -0.2# -0.05 # barX step
-barX_end = 3 # ending moment for calculation
+h = -0.05 # barX step
+barX_end = 0.1#0.1 # ending moment for calculation
 
 # Paths
 
@@ -113,35 +113,6 @@ g_fun = interp1d(temps[::-1], geff[::-1], kind='cubic')
 gs_fun = interp1d(temps[::-1], heff[::-1], kind='cubic')
 gs_der_over_gs_fun = interp1d(temps[::-1], gs_der_over_gs[::-1], kind='cubic')
 
-#==================
-# Helper functions
-#==================
-
-# Note: they require gs_fun() and gs_der_over_gs_fun() functions
-
-def fun_z_MB_odeint(z, barX):
-    ''' z' = fun_z_MB_odeint(z,barX) '''
-    return -gs_der_over_gs_fun(barX*mF)+\
-    Cz_MB*m.sinh(z)/m.pow(barX,5)*coeff*barS_MB_interp(barX)*\
-    (1.+barX/3.*gs_der_over_gs_fun(barX*mF))/m.sqrt(g_fun(barX*mF))
-
-def Y_eq_MB(barX):
-    ''' Y equilibrium for MB statistics '''
-    return 22.5 / m.pow(m.pi, 4) / gs_fun(barX * mF)
-
-def Y_eq_BE(barX):
-    ''' Y equilibrium for BE statistics '''
-    return 22.5 / m.pow(m.pi, 4) / gs_fun(barX * mF) * zeta_3
-
-def Y_BE(z, barX): 
-    '''
-    Y(z) for BE statistics 
-    Function works for BEFD and BEBE statistics
-    Note: limit in the integral is arbitrary !!!!!!
-    '''
-    integral = lambda y: y**2 / (m.exp(y + z) - 1)
-    return Y_eq_MB(barX) / 2 * integrate.quad(integral, 0, 100)[0]
-
 #=========================================
 # Interpolation for MB and pBE statistics
 #=========================================
@@ -159,17 +130,16 @@ if calc_interp == 1 or not os.path.isfile(file_nodes):
     if os.path.isfile(file_nodes):
         os.remove(file_nodes)
 
-    barXs_nodes = np.linspace(barX_end, barX_0, 6) # ascending order
+    barXs_nodes = np.linspace(barX_end/10, barX_0, 50) # ascending order (first value possibly small)
 
     for  i, barX in enumerate(barXs_nodes):
-        x = 1./barX
         # Mathematica script execution for MB approximation
-        command = join_line(['cd', path_scripts, ';', './MB_M_Weinberg', x, ACC, m1, Gam1])
+        command = join_line(['cd', path_scripts, ';', './MB_M_Weinberg', 1/barX, ACC, m1, Gam1])
         os.system(command)
         with open(path_scripts+'res_MB_M_Weinberg.dat', 'r') as f:
             nodes_MB.append((float(f.readline())))
         # Mathematica script execution for pBE approximation
-        command = join_line(['cd', path_scripts, ';', './pBE_M_Weinberg', x, ACC, m1, Gam1])
+        command = join_line(['cd', path_scripts, ';', './pBE_M_Weinberg', 1/barX, ACC, m1, Gam1])
         os.system(command)
         with open(path_scripts+'res_pBE_M_Weinberg.dat', 'r') as f:
             nodes_pBE.append((float(f.readline())))
@@ -177,7 +147,7 @@ if calc_interp == 1 or not os.path.isfile(file_nodes):
         params = [barX, nodes_MB[-1], nodes_pBE[-1]]
         # Saving results
         file_append(file_nodes, params)
-        print(i, params)
+        print("%3d %10.2f %22.5f %22.5f" % (i, params[0], params[1], params[2]))
 else:
     # --- or use read_columns_as_rows() for all colmuns
     for line in open(file_nodes, 'r'):
@@ -191,30 +161,51 @@ end_nodes = timeit.default_timer()
 barS_MB_interp = interp1d(barXs_nodes, nodes_MB, kind='cubic')
 barS_pBE_interp = interp1d(barXs_nodes, nodes_pBE, kind='cubic')
 
-print("Node calculation time: %s" % (end_nodes - start))
+print("-- Time: %5.2f s" % (end_nodes - start))
 
-#===================================
-# RK4 solution for BEFD statistics
-#===================================
+#======================================
+# Odeint solution for MB approximation
+#======================================
 
 print("\nOdeint solution for MB...")
 
+def Y_eq_MB(barX):
+    ''' Y equilibrium for MB statistics '''
+    return 22.5 / m.pow(m.pi, 4) / gs_fun(barX * mF)
+
+def Y_eq_BE(barX):
+    ''' Y equilibrium for BE statistics '''
+    return Y_eq_MB(barX) * zeta_3
+
+def fun_z_MB_odeint(z, barX):
+    ''' z' = fun_z_MB_odeint(z,barX) '''
+    return -gs_der_over_gs_fun(barX * mF) \
+    + Cz_MB * m.sinh(z) / m.pow(barX, 5) * coeff * barS_MB_interp(barX) \
+    * (1 + barX / 3 * gs_der_over_gs_fun(barX * mF)) / m.sqrt(g_fun(barX * mF))
+
 z_0 = 0
 barX_odeint = np.linspace(barX_0, barX_end, 1000) # descending order
-z_odeint = integrate.odeint(fun_z_MB_odeint, z_0, barX_odeint)[0]
-Y_BE_odeint = []
+z_odeint = integrate.odeint(fun_z_MB_odeint, z_0, barX_odeint).flatten()
+Y_odeint = []
+Y_eq = [] # equilibrium
 
+# Rough estimation of the starting point for RK4 solution
 found = False
 for i, z in enumerate(z_odeint):
-    Y_BE_odeint.append(m.exp(-z) * Y_eq_BE(barX_odeint[i]))
-    if found == False and m.exp(-z) <= 0.95:
+    Y_odeint.append(m.exp(-z) * Y_eq_BE(barX_odeint[i]))
+    Y_eq.append(Y_eq_BE(barX_odeint[i]))
+    if found == False and m.exp(-z) <= 0.95: # 5% deviation
         found = True
         z_0 = z
         barX_0 = barX_odeint[i]
 
 print("BarX_0 = %.3f, z_0 = %.3f" % (barX_0, z_0))
 
-print("\nMathematica solution for BEFD, MB, fBE, pBE...")
+#===================================
+# RK4 solution for BEFD statistics
+#===================================
+
+print("\nRK4 solution for BEFD, MB, fBE, pBE...")
 
 barXs = np.arange(barX_0, barX_end, h) # descending order
 
@@ -233,7 +224,7 @@ class RK4_Solver(object):
 
     Requires:
     - global parameters: mF, coeff, Cz, Cz_MB, path_scripts
-    - global functions: g_fun, gs_der_over_gs_fun, barS_MB_interp, barS_pBE_interp
+    - global functions: g_fun, gs_der_over_gs_fun, barS_MB_interp, barS_pBE_interp, Y_eq_MB, Y_eq_BE
     '''
     def __init__(self, ACC, m1, Gam1, barXs, z_0=0):
         self.ACC = ACC
@@ -251,22 +242,33 @@ class RK4_Solver(object):
         # first step
         z_BE, z_MB, z_fBE, z_pBE = np.full(4, self.z_0)
         self.z_ = [[z_BE, z_MB, z_fBE, z_pBE]]
+        self.Y_eq_ = [Y_eq_BE(barXs[0])]
+        self.Y_ = [self.Y_BE(z_BE, barXs[0]), \
+        m.exp(-z_MB)*self.Y_eq_[0], m.exp(-z_fBE)*self.Y_eq_[0], m.exp(-z_pBE)*self.Y_eq_[0]]
         # nex steps
         for i in range(len(self.barXs) - 1):
             barX_prev = self.barXs[i] # previous step
+            barX_curr = self.barXs[i+1] # current step
+            h = barX_curr - barX_prev
 
-            z_BE = self.calc_z(z_BE, barX_prev, self.calc_k_BEFD)
-            z_MB = self.calc_z(z_MB, barX_prev, self.calc_k_MB)
-            z_fBE = self.calc_z(z_fBE, barX_prev, self.calc_k_fBE)
-            z_pBE = self.calc_z(z_pBE, barX_prev, self.calc_k_pBE)
+            z_BE = self.calc_z(z_BE, barX_prev, h, self.calc_k_BEFD)
+            z_MB = self.calc_z(z_MB, barX_prev, h, self.calc_k_MB)
+            z_fBE = self.calc_z(z_fBE, barX_prev, h, self.calc_k_fBE)
+            z_pBE = self.calc_z(z_pBE, barX_prev, h, self.calc_k_pBE)
 
             zs = [z_BE, z_MB, z_fBE, z_pBE]
-            print(i, zs) # print all simultanously (important for checking results on the flow)
+            # print all simultaneously (important for checking results on the flow)
+            print("%3d %10.2f %10.5f %10.5f %10.5f %10.5f" % (i, barX_curr, zs[0], zs[1], zs[2], zs[3]))
             self.z_.append(zs)
+
+            self.Y_eq_.append(Y_eq_BE(barX_curr))
+            Ys = self.Y_BE(z_BE, barX_curr), \
+            m.exp(-z_MB)*self.Y_eq_[-1], m.exp(-z_fBE)*self.Y_eq_[-1], m.exp(-z_pBE)*self.Y_eq_[-1]
+            self.Y_.append(Ys)
 
     # Helper functions
 
-    def calc_z(self, z, barX, calc_k):
+    def calc_z(self, z, barX, h, calc_k):
         ''' Calculates k coefficients for RK4 method '''
         k1 = calc_k(z, barX) 
         k2 = calc_k(z + h / 2 * k1, barX + h / 2)
@@ -337,6 +339,36 @@ class RK4_Solver(object):
         + Cz_MB * m.sinh(z) / m.pow(barX, 5) * barS_pBE * zeta_3 \
         * (1 + barX / 3 * gs_der_over_gs_fun(barX * mF)) / m.sqrt(g_fun(barX * mF))
 
+    def Y_BE(self, z, barX): 
+        '''
+        Y(z) for BE statistics 
+        Function works for BEFD and BEBE statistics
+        Note: limit in the integral is arbitrary !!!!!!
+        '''
+        integral = lambda y: y**2 / (m.exp(y + z) - 1)
+        return Y_eq_MB(barX) / 2 * integrate.quad(integral, 0, 100)[0]
+
 S = RK4_Solver(ACC, m1, Gam1, barXs)
 S.calculate()
-print(S1.z_)
+
+end_RK4 = timeit.default_timer()
+print("-- Time: %5.2f s" % (end_RK4 - start))
+
+#=======
+# Plots
+#=======
+
+plt.plot(barX_odeint, Y_odeint, color='blue', label=r'$Y_{\rm odeint}$')
+plt.plot(barX_odeint, Y_eq, color='grey', label=r'$Y_{\rm eq}$')
+plt.xlabel(r'$\bar{x}=T/m_F$')
+plt.ylabel(r'$Y$')
+plt.legend(loc='upper right')
+plt.savefig(path_results + "y_odeint.pdf")
+plt.close()
+
+# TODO: 
+# - plot Y
+# - refactor Y
+# - save z, Y
+# - calc g
+# - GG = True

@@ -41,13 +41,13 @@ os.makedirs(path_results)
 
 # Scan
 
-m1_vec = [0.5]
-kappa_vec = [0.0001, 0.0002]
+m1_vec = [1]
+kappa_vec = [0.001]#, 0.002]
 #m1_vec = np.round(np.linspace(0.25, 0.5, 10), 8)
 #kappa_vec =np.array([0.001, 0.002])
 
-print(m1_vec)
-print(kappa_vec)
+print('m1 = %s' % m1_vec)
+print('kappa = %s' % kappa_vec)
 
 for m1 in m1_vec:
     calc_interp = 1 # whether or not to perform interpolation for MB and pBE approximations 
@@ -63,4 +63,4 @@ for m1 in m1_vec:
 # Running time 
 
 time = timeit.default_timer() - start
-print("\nTotal time: %s" % time)
+print("\n-- Total time: %5.2f s" % time)
