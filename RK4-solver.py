@@ -45,6 +45,10 @@ m1 = float(sys.argv[5])
 calc_interp = int(sys.argv[6])
 GG = sys.argv[7]
 
+# endings for result files
+file_nodes_info =join_line([m1, lam_phi, ACC], "_") # nodes
+file_info =join_line([m1, kappa, lam_phi, ACC], "_") # Y, z
+
 # Parameters 
 
 Mpl = 1.2209e19 # Planck mass in GeV
@@ -122,7 +126,7 @@ barXs_nodes = []
 nodes_MB = []
 nodes_pBE = []
 
-file_nodes = path_results + "interp_" + str(m1) + "_" + str(lam_phi) + "_" + str(int(ACC))
+file_nodes = path_results + "interp_" + file_nodes_info
 
 # Interpolate if flag is 1 or file does not exist
 if calc_interp == 1 or not os.path.isfile(file_nodes):
@@ -237,14 +241,13 @@ class RK4_Solver(object):
 
     def calculate(self):
         '''
-        Calculates pseudopotential for BEFD, MB, fBE, fBE
+        Calculates pseudopotential z_, normalized relic density Y_ and Y_eq_
+        for BEFD, MB, fBE, fBE
         '''
         # first step
         z_BE, z_MB, z_fBE, z_pBE = np.full(4, self.z_0)
         self.z_ = [[z_BE, z_MB, z_fBE, z_pBE]]
-        self.Y_eq_ = [Y_eq_BE(barXs[0])]
-        self.Y_ = [self.Y_BE(z_BE, barXs[0]), \
-        m.exp(-z_MB)*self.Y_eq_[0], m.exp(-z_fBE)*self.Y_eq_[0], m.exp(-z_pBE)*self.Y_eq_[0]]
+        self.Y_ = [self.calc_Y(self.z_[0], barXs[0])]
         # nex steps
         for i in range(len(self.barXs) - 1):
             barX_prev = self.barXs[i] # previous step
@@ -257,24 +260,33 @@ class RK4_Solver(object):
             z_pBE = self.calc_z(z_pBE, barX_prev, h, self.calc_k_pBE)
 
             zs = [z_BE, z_MB, z_fBE, z_pBE]
-            # print all simultaneously (important for checking results on the flow)
-            print("%3d %10.2f %10.5f %10.5f %10.5f %10.5f" % (i, barX_curr, zs[0], zs[1], zs[2], zs[3]))
             self.z_.append(zs)
 
-            self.Y_eq_.append(Y_eq_BE(barX_curr))
-            Ys = self.Y_BE(z_BE, barX_curr), \
-            m.exp(-z_MB)*self.Y_eq_[-1], m.exp(-z_fBE)*self.Y_eq_[-1], m.exp(-z_pBE)*self.Y_eq_[-1]
+            Ys = self.calc_Y(zs, barX_curr)
             self.Y_.append(Ys)
+
+            # print all simultaneously (important for checking results on the flow)
+            print("%3d %10.2f    z: %10.5f %10.5f %10.5f %10.5f    Y: %10.5f %10.5f %10.5f %10.5f" \
+            % (i, barX_curr, zs[0], zs[1], zs[2], zs[3], Ys[0], Ys[1], Ys[2], Ys[3]))
 
     # Helper functions
 
     def calc_z(self, z, barX, h, calc_k):
-        ''' Calculates k coefficients for RK4 method '''
+        ''' 
+        Calculates k coefficients for RK4 method 
+        h is important because barXs data may be unevenly distributed
+        '''
         k1 = calc_k(z, barX) 
         k2 = calc_k(z + h / 2 * k1, barX + h / 2)
         k3 = calc_k(z + h / 2 * k2, barX + h / 2)
         k4 = calc_k(z + h * k3, barX + h)
         return z + h / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+
+    def calc_Y(self, zs, barX):
+        ''' Calculates Y values for a given zs array and barX''' 
+        Ys =[self.Y_BE(zs[0], barX)]
+        Ys.extend(np.multiply(np.exp(np.negative(zs[1:])), Y_eq_BE(barX)))
+        return Ys
 
     def calc_k_BEFD(self, z, barX):
         ''' Calculates k coefficient for BEFD '''
@@ -348,27 +360,50 @@ class RK4_Solver(object):
         integral = lambda y: y**2 / (m.exp(y + z) - 1)
         return Y_eq_MB(barX) / 2 * integrate.quad(integral, 0, 100)[0]
 
-S = RK4_Solver(ACC, m1, Gam1, barXs)
+S = RK4_Solver(ACC, m1, Gam1, barXs, z_0)
 S.calculate()
+z_RK4 = S.z_
+Y_RK4 = S.Y_
 
 end_RK4 = timeit.default_timer()
-print("-- Time: %5.2f s" % (end_RK4 - start))
+print("-- Time: %5.2f s" % (end_RK4 - end_nodes))
 
 #=======
 # Plots
 #=======
 
-plt.plot(barX_odeint, Y_odeint, color='blue', label=r'$Y_{\rm odeint}$')
+# z
+plt.plot(barXs, [z[0] for z in z_RK4], color='red', label=r'$z_{\rm BEFD}$')
+plt.plot(barXs, [z[1] for z in z_RK4], color='blue', label=r'$z_{\rm MB}$')
+plt.plot(barXs, [z[2] for z in z_RK4], color='magenta', label=r'$z_{\rm fBE}$')
+plt.plot(barXs, [z[3] for z in z_RK4], color='green', label=r'$z_{\rm pBE}$')
+plt.xlabel(r'$\bar{x}=T/m_F$')
+plt.ylabel(r'$z$')
+plt.legend(loc='upper right')
+plt.savefig(path_results + "z_" + file_info + ".pdf")
+plt.close()
+
+# Y
 plt.plot(barX_odeint, Y_eq, color='grey', label=r'$Y_{\rm eq}$')
+plt.plot(barX_odeint, Y_odeint, color='cyan', label=r'$Y_{\rm odeint}$')
+plt.plot(barXs, [Y[0] for Y in Y_RK4], color='red', label=r'$Y_{\rm BEFD}$')
+plt.plot(barXs, [Y[1] for Y in Y_RK4], color='blue', label=r'$Y_{\rm MB}$')
+plt.plot(barXs, [Y[2] for Y in Y_RK4], color='magenta', label=r'$Y_{\rm fBE}$')
+plt.plot(barXs, [Y[3] for Y in Y_RK4], color='green', label=r'$Y_{\rm pBE}$')
 plt.xlabel(r'$\bar{x}=T/m_F$')
 plt.ylabel(r'$Y$')
 plt.legend(loc='upper right')
-plt.savefig(path_results + "y_odeint.pdf")
+plt.savefig(path_results + "Y_" + file_info + ".pdf")
 plt.close()
 
+#======
+# Save
+#======
+
+np.savetxt(path_results + "barX_" + file_info, barXs, fmt='%.5f')
+np.savetxt(path_results + "z_" + file_info, z_RK4, fmt='%.10f')
+np.savetxt(path_results + "Y_" + file_info, Y_RK4, fmt='%.10f')
+
 # TODO: 
-# - plot Y
-# - refactor Y
-# - save z, Y
 # - calc g
 # - GG = True
