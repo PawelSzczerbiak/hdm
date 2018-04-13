@@ -1,4 +1,5 @@
 import numpy as np
+import os
 
 def join_line(data, sep=" "):
     '''
@@ -42,11 +43,13 @@ def read_columns_as_rows(path, columns, sep='\t', format=float):
     Return: numpy array
     '''
     res = []
-    with open(path, 'r') as file:
-        for line in file:
-            elements = line.split(sep)
-            res.append([elements[i] for i in columns])
-    return np.asarray(res).transpose().astype(format)
+    if os.path.isfile(path):
+        with open(path, 'r') as file:
+            for line in file:
+                elements = line.split(sep)
+                res.append([elements[i] for i in columns])
+            res = np.asarray(res).transpose().astype(format)
+    return res
 # Note: in the approach below the whole file is read 
 # but is more elastic i.e. columns may be list or integer
 #         res.append(line.split(sep))

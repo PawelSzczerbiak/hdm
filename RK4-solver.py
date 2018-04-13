@@ -105,10 +105,13 @@ if GG == "GG":
     file_0 = "gg_interp_" + str(m1) + "_" + str(kappa) + "_" + str(lam_phi) + "_" + str(ACC)
     path_0 = dir_0 + file_0
     # backreaction = pd.read_csv(path_0, sep="\t", header=None)[1]
-    backreaction = read_columns_as_rows(path_0, [1])[0]
+    backreaction = read_columns_as_rows(path_0, [1])
     # Add backreaction
-    heff += backreaction
-    geff += backreaction
+    if(backreaction):
+        heff += backreaction[0]
+        geff += backreaction[0]
+    else:
+        print("\n--- WARNING: File with GG corrections not found!")
 
 # Interpolation
 
@@ -148,7 +151,7 @@ if calc_interp == 1 or not os.path.isfile(file_nodes):
         with open(path_scripts+'res_pBE_M_Weinberg.dat', 'r') as f:
             nodes_pBE.append((float(f.readline())))
 
-        params = [barX, nodes_MB[-1], nodes_pBE[-1]]
+        params = [round(barX, 5), nodes_MB[-1], nodes_pBE[-1]]
         # Saving results
         file_append(file_nodes, params)
         print("%3d %10.2f %22.5f %22.5f" % (i, params[0], params[1], params[2]))
@@ -405,5 +408,4 @@ np.savetxt(path_results + "z_" + file_info, z_RK4, fmt='%.10f')
 np.savetxt(path_results + "Y_" + file_info, Y_RK4, fmt='%.10f')
 
 # TODO: 
-# - calc g
-# - GG = True
+# - calc g(T)

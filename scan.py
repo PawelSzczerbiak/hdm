@@ -41,8 +41,8 @@ os.makedirs(path_results)
 
 # Scan
 
-m1_vec = [1]#[0.4]
-kappa_vec = [0.001]#[0.0002]
+m1_vec = [0.4, 0.6]
+kappa_vec = [0.0001, 0.0002]
 #m1_vec = np.round(np.linspace(0.25, 0.5, 10), 8)
 #kappa_vec =np.array([0.001, 0.002])
 
