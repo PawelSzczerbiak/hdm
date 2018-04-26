@@ -3,7 +3,7 @@ Python scripts that calculate hot dark matter relic density in [S. Weinberg's mo
 for two Goldstone bosons annihilationg into muon/pion pairs, using the method proposed by 
 [Dolgov & Kainulainen](https://www.sciencedirect.com/science/article/pii/0550321393906467?via%3Dihub). 
 
-Execution time of the sample scan: ~5 min ( i5-3210M CPU, 8GB RAM, Ubuntu 16.04 64bit).
+Execution time of the sample scan: ~16 sec ( i5-3210M CPU, 8GB RAM, Ubuntu 16.04 64bit). 
 
 ## Content
 - `do` contains scans (bash commands) to be performed
@@ -14,7 +14,11 @@ Execution time of the sample scan: ~5 min ( i5-3210M CPU, 8GB RAM, Ubuntu 16.04 
 - `scripts/` contains [Mathematica](https://www.wolfram.com/mathematica/) scripts that integrate (normalized) cross sections
 - `results/` contains results (here: for the sample scan)
 
+## Comments
+
+The Python-Mathematica communication is established by using swap files, which is not very efficient, however the Mathematica computation is the most time-consuming factor here.
+
 ## Requirements
 - [Python 3.x](https://www.python.org/)
-- [Mathematica 10](https://www.wolfram.com/mathematica/) - crucial! If other version is used, 
+- [Mathematica 10](https://www.wolfram.com/mathematica/) - obligatory for ACC different from -3. If other version is used, 
 please make sure to set appropriate path in Mathematica scripts.
