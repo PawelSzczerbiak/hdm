@@ -43,15 +43,15 @@ os.makedirs(path_results)
 
 m1_vec = [0.4, 0.6]
 kappa_vec = [0.0001, 0.0002]
-#m1_vec = np.round(np.linspace(0.25, 0.5, 10), 8)
-#kappa_vec =np.array([0.001, 0.002])
 
 print('m1 = %s' % m1_vec)
 print('kappa = %s' % kappa_vec)
 
 for m1 in m1_vec:
+    m1 = round(m1, 8)
     calc_interp = 1 # whether or not to perform interpolation for MB and pBE approximations 
     for kappa in kappa_vec: 
+        kappa = round(kappa, 8)
         # Perform calculation
         print("\n\nScan for m1 = %s, kappa = %s" % (m1, kappa))
         command = join_line(["python RK4-solver.py", scan, ACC, lam_phi, kappa, m1, calc_interp, GG])

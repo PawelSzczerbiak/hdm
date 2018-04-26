@@ -28,7 +28,7 @@ import numpy as np
 import pandas as pd
 import math as m
 import matplotlib.pyplot as plt
-import scipy.special as special
+import scipy.special as spec
 from scipy.interpolate import interp1d
 import scipy.integrate as integrate
 from utils import join_line, file_append, read_columns_as_rows
@@ -53,15 +53,17 @@ file_info =join_line([m1, kappa, lam_phi, ACC], "_") # Y, z
 
 Mpl = 1.2209e19 # Planck mass in GeV
 mF = 0.1056  # muon mass in GeV
+mP = 0.13957 # pion mass in GeV
 m2 = 125 # second scalar mass (Higgs boson) in GeV
 
 zeta_3 = 1.20205690315959429 # Riemann zeta function for arg = 3
-Cz = m.sqrt(45) / 128/ pow(m.pi, 4.5) * Mpl / mF
-Cz_MB = m.sqrt(45) / 512 / pow(m.pi, 4.5) * Mpl / mF
-CY = 1 / m.sqrt(45 * m.pi) / 512 * Mpl / mF
-CY_pBE = 1 / m.sqrt(45 * m.pi) / 512 * Mpl / mF
+Cz = np.sqrt(45) / 128/ pow(np.pi, 4.5) * Mpl / mF
+Cz_MB = np.sqrt(45) / 512 / pow(np.pi, 4.5) * Mpl / mF
+CY = 1 / np.sqrt(45 * np.pi) / 512 * Mpl / mF
+CY_pBE = 1 / np.sqrt(45 * np.pi) / 512 * Mpl / mF
 
-Gam1 = lam_phi * m1 / 16 / m.pi * 1000 # first scalar decay rate in GeV
+Gam1 = lam_phi * m1 / 16 / np.pi # first scalar decay rate in GeV
+Gam2 = 0.004  # second scalar decay rate in GeV
 coeff = 2 * kappa**2 * mF**8 / m1**4 / m2**4 # coefficient in |M|^2
 barX_0 = 4 # barX = T_max / mF, starting moment for calculation
 h = -0.05 # barX step
@@ -129,39 +131,60 @@ barXs_nodes = []
 nodes_MB = []
 nodes_pBE = []
 
+# barS in MB approximation for ACC = -3
+def barS_MB_ACC3(barX, m1, Gam1):
+    x = 1/barX
+    alfa = m1**2*m2**2/(m2**2 - m1**2)**2/mF**4*(m1*Gam2 - m2*Gam1)**2
+    bs = m1**2/mF**2
+    if m1 <= 2*mP:
+        barS_MB = m1**3*m2**4/mF**6/Gam1*np.pi*(bs - 4)*(bs**2 + alfa)/ \
+        ((bs - m2**2/mF**2)**2 + Gam2**2*m2**2/mF**4)*np.sqrt(bs-4)*spec.kv(1, x*np.sqrt(bs))
+    else:
+        # additional annihilation into pion pair
+        barS_MB = m1**3*m2**4/mF**6/Gam1*np.pi*bs**(3/2)* \
+        ((1 - 4*mF**2/m1**2)**(3/2) + 1/27*(m1/mF)**2*(1 + 11/2*mP**2/m1**2)**2*np.sqrt(1 - 4*mP**2/m1**2))*\
+        (bs**2)/((bs - m2**2/mF**2)**2 + Gam2**2*m2**2/mF**4)*spec.kv(1, x*np.sqrt(bs))
+    return barS_MB
+
 file_nodes = path_results + "interp_" + file_nodes_info
 
-# Interpolate if flag is 1 or file does not exist
-if calc_interp == 1 or not os.path.isfile(file_nodes):
-    # Remove file if exists
-    if os.path.isfile(file_nodes):
-        os.remove(file_nodes)
-
+if ACC == -3: # the worst approximation (simple algebraic computation)
     barXs_nodes = np.linspace(barX_end/10, barX_0, 50) # ascending order (first value possibly small)
+    for barX in barXs_nodes:
+        nodes_MB.append(barS_MB_ACC3(barX, m1, Gam1))
+    nodes_pBE = nodes_MB/np.tanh(m1/(4*mF*barXs_nodes))
+else: # integration needed
+    # Interpolate if flag is 1 or file does not exist
+    if calc_interp == 1 or not os.path.isfile(file_nodes):
+        # Remove file if exists
+        if os.path.isfile(file_nodes):
+            os.remove(file_nodes)
 
-    for  i, barX in enumerate(barXs_nodes):
-        # Mathematica script execution for MB approximation
-        command = join_line(['cd', path_scripts, ';', './MB_M_Weinberg', 1/barX, ACC, m1, Gam1])
-        os.system(command)
-        with open(path_scripts+'res_MB_M_Weinberg.dat', 'r') as f:
-            nodes_MB.append((float(f.readline())))
-        # Mathematica script execution for pBE approximation
-        command = join_line(['cd', path_scripts, ';', './pBE_M_Weinberg', 1/barX, ACC, m1, Gam1])
-        os.system(command)
-        with open(path_scripts+'res_pBE_M_Weinberg.dat', 'r') as f:
-            nodes_pBE.append((float(f.readline())))
+        barXs_nodes = np.linspace(barX_end/10, barX_0, 50) # ascending order (first value possibly small)
 
-        params = [round(barX, 5), nodes_MB[-1], nodes_pBE[-1]]
-        # Saving results
-        file_append(file_nodes, params)
-        print("%3d %10.2f %22.5f %22.5f" % (i, params[0], params[1], params[2]))
-else:
-    # --- or use read_columns_as_rows() for all colmuns
-    for line in open(file_nodes, 'r'):
-        elements = line.split(' ')
-        barXs_nodes.append(float(elements[0]))
-        nodes_MB.append(float(elements[1]))
-        nodes_pBE.append(float(elements[2]))
+        for  i, barX in enumerate(barXs_nodes):
+            # Mathematica script execution for MB approximation
+            command = join_line(['cd', path_scripts, ';', './MB_M_Weinberg', 1/barX, ACC, m1, Gam1])
+            os.system(command)
+            with open(path_scripts+'res_MB_M_Weinberg.dat', 'r') as f:
+                nodes_MB.append((float(f.readline())))
+            # Mathematica script execution for pBE approximation
+            command = join_line(['cd', path_scripts, ';', './pBE_M_Weinberg', 1/barX, ACC, m1, Gam1])
+            os.system(command)
+            with open(path_scripts+'res_pBE_M_Weinberg.dat', 'r') as f:
+                nodes_pBE.append((float(f.readline())))
+
+            params = [round(barX, 5), nodes_MB[-1], nodes_pBE[-1]]
+            # Saving results
+            file_append(file_nodes, params)
+            print("%3d %10.2f %22.5f %22.5f" % (i, params[0], params[1], params[2]))
+    else:
+        # --- or use read_columns_as_rows() for all colmuns
+        for line in open(file_nodes, 'r'):
+            elements = line.split(' ')
+            barXs_nodes.append(float(elements[0]))
+            nodes_MB.append(float(elements[1]))
+            nodes_pBE.append(float(elements[2]))
 
 end_nodes = timeit.default_timer()
 
@@ -178,7 +201,7 @@ print("\nOdeint solution for MB...")
 
 def Y_eq_MB(barX):
     ''' Y equilibrium for MB statistics '''
-    return 22.5 / m.pow(m.pi, 4) / gs_fun(barX * mF)
+    return 22.5 /np.pi**4 / gs_fun(barX * mF)
 
 def Y_eq_BE(barX):
     ''' Y equilibrium for BE statistics '''
@@ -187,8 +210,8 @@ def Y_eq_BE(barX):
 def fun_z_MB_odeint(z, barX):
     ''' z' = fun_z_MB_odeint(z,barX) '''
     return -gs_der_over_gs_fun(barX * mF) \
-    + Cz_MB * m.sinh(z) / m.pow(barX, 5) * coeff * barS_MB_interp(barX) \
-    * (1 + barX / 3 * gs_der_over_gs_fun(barX * mF)) / m.sqrt(g_fun(barX * mF))
+    + Cz_MB * m.sinh(z) / barX**5 * coeff * barS_MB_interp(barX) \
+    * (1 + barX / 3 * gs_der_over_gs_fun(barX * mF)) / np.sqrt(g_fun(barX * mF))
 
 z_0 = 0
 barX_odeint = np.linspace(barX_0, barX_end, 1000) # descending order
@@ -199,9 +222,9 @@ Y_eq = [] # equilibrium
 # Rough estimation of the starting point for RK4 solution
 found = False
 for i, z in enumerate(z_odeint):
-    Y_odeint.append(m.exp(-z) * Y_eq_BE(barX_odeint[i]))
+    Y_odeint.append(np.exp(-z) * Y_eq_BE(barX_odeint[i]))
     Y_eq.append(Y_eq_BE(barX_odeint[i]))
-    if found == False and m.exp(-z) <= 0.95: # 5% deviation
+    if found == False and np.exp(-z) <= 0.95: # 5% deviation
         found = True
         z_0 = z
         barX_0 = barX_odeint[i]
@@ -293,14 +316,28 @@ class RK4_Solver(object):
 
     def calc_k_BEFD(self, z, barX):
         ''' Calculates k coefficient for BEFD '''
-        try:
-            # Mathematica script execution for BEFD
-            command = join_line(['cd', path_scripts, ';', './BEFD_M_Weinberg', 1/barX, z, self.ACC, self.m1, self.Gam1])
-            os.system(command)
-            with open(path_scripts+'res_BEFD_M_Weinberg.dat', 'r') as f: 
-                barS_BE = (float(f.readline()))
-        except:
-            barS_BE = None
+        if ACC == -3: # the worst approximation (simple algebraic computation)
+            x = 1/barX
+            alfa = m1**2*m2**2/(m2**2 - m1**2)**2/mF**4*(m1*Gam2 - m2*Gam1)**2
+            if m1 <= 2*mP:
+                barS_BE = np.exp(-2*z)*x**4*m1**7*m2**4/mF**10/Gam1*np.pi*\
+                (1 - 4*mF**2/m1**2)**(3/2)*(m1**4/mF**4 + alfa)/ \
+                ((m1**2/mF**2 - m2**2/mF**2)**2 + Gam2**2*m2**2/mF**4)*1/2/x*mF/m1*spec.kv(1, (m1*x)/mF)
+            else:
+                # additional annihilation into pion pair
+                barS_BE = np.exp(-2*z)*x**4*m1**7*m2**4/mF**10/Gam1*np.pi*\
+                ((1 - 4*mF**2/m1**2)**(3/2) + 1/27*(m1/mF)**2*(1 + 11/2*mP**2/m1**2)**2* \
+                np.sqrt(1 - 4*mP**2/m1**2)/np.tanh((m1*x)/(4*mF))**2)*(m1**4/mF**4)/ \
+                ((m1**2/mF**2 - m2**2/mF**2)**2 + Gam2**2*m2**2/mF**4)*1/2/x*mF/m1*spec.kv(1, (m1*x)/mF)
+        else: # intergration needed
+            try:
+                # Mathematica script execution for BEFD
+                command = join_line(['cd', path_scripts, ';', './BEFD_M_Weinberg', 1/barX, z, self.ACC, self.m1, self.Gam1])
+                os.system(command)
+                with open(path_scripts+'res_BEFD_M_Weinberg.dat', 'r') as f: 
+                    barS_BE = (float(f.readline()))
+            except:
+                barS_BE = None
         return self.fun_z_BE(z, barX, coeff * barS_BE) if barS_BE else 0
 
     def calc_k_MB(self, z, barX):
@@ -325,7 +362,7 @@ class RK4_Solver(object):
         Function works for BEFD and BEBE statistics
         '''
         return (-gs_der_over_gs_fun(barX * mF) / 3 / barX * self.barJ_BE(z, barX, 3) \
-        + Cz * barX / m.sqrt(g_fun(barX * mF)) * m.sinh(z) * barS_BE \
+        + Cz * barX / np.sqrt(g_fun(barX * mF)) * m.sinh(z) * barS_BE \
         * (1 + barX / 3 * gs_der_over_gs_fun(barX * mF))) / self.barJ_BE(z, barX, 2)
 
     def barJ_BE(self, z, barX, n):
@@ -333,26 +370,26 @@ class RK4_Solver(object):
         Helper functon for fun_z_BE() function 
         Note: limit in the integral is arbitrary !!!!!!
         '''
-        integral = lambda y: barX**(n + 1) * y**n * m.exp(y) / (m.exp(y + z) - 1)**2
+        integral = lambda y: barX**(n + 1) * y**n * np.exp(y) / (np.exp(y + z) - 1)**2
         return integrate.quad(integral, 0, 100)[0] # limit !!!!!!
 
     def fun_z_MB(self, z, barX, barS_MB):
         ''' z' = fun_z_MB(z, barX, barS_MB) '''
         return -gs_der_over_gs_fun(barX * mF) \
-        + Cz_MB * m.sinh(z) / m.pow(barX, 5) * barS_MB \
-        * (1 + barX / 3 * gs_der_over_gs_fun(barX * mF)) / m.sqrt(g_fun(barX * mF))
+        + Cz_MB * m.sinh(z) / barX**5 * barS_MB \
+        * (1 + barX / 3 * gs_der_over_gs_fun(barX * mF)) / np.sqrt(g_fun(barX * mF))
 
     def fun_z_fBE(self, z, barX, barS_MB):
         ''' z' = fun_z_fBE(z, barX, barS_MB) '''
         return -gs_der_over_gs_fun(barX * mF) \
-        + Cz_MB * m.sinh(z) / m.pow(barX, 5) * barS_MB * zeta_3 \
-        * (1 + barX / 3 * gs_der_over_gs_fun(barX * mF)) / m.sqrt(g_fun(barX * mF))
+        + Cz_MB * m.sinh(z) / barX**5 * barS_MB * zeta_3 \
+        * (1 + barX / 3 * gs_der_over_gs_fun(barX * mF)) / np.sqrt(g_fun(barX * mF))
 
     def fun_z_pBE(self, z, barX, barS_pBE):
         ''' z' = fun_z_pBE(z, barX, barS_pBE) '''
         return -gs_der_over_gs_fun(barX * mF) \
-        + Cz_MB * m.sinh(z) / m.pow(barX, 5) * barS_pBE * zeta_3 \
-        * (1 + barX / 3 * gs_der_over_gs_fun(barX * mF)) / m.sqrt(g_fun(barX * mF))
+        + Cz_MB * m.sinh(z) / barX**5 * barS_pBE * zeta_3 \
+        * (1 + barX / 3 * gs_der_over_gs_fun(barX * mF)) / np.sqrt(g_fun(barX * mF))
 
     def Y_BE(self, z, barX): 
         '''
@@ -360,7 +397,7 @@ class RK4_Solver(object):
         Function works for BEFD and BEBE statistics
         Note: limit in the integral is arbitrary !!!!!!
         '''
-        integral = lambda y: y**2 / (m.exp(y + z) - 1)
+        integral = lambda y: y**2 / (np.exp(y + z) - 1)
         return Y_eq_MB(barX) / 2 * integrate.quad(integral, 0, 100)[0]
 
 S = RK4_Solver(ACC, m1, Gam1, barXs, z_0)
