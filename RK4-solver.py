@@ -59,14 +59,12 @@ m2 = 125 # second scalar mass (Higgs boson) in GeV
 zeta_3 = 1.20205690315959429 # Riemann zeta function for arg = 3
 Cz = np.sqrt(45) / 128/ pow(np.pi, 4.5) * Mpl / mF
 Cz_MB = np.sqrt(45) / 512 / pow(np.pi, 4.5) * Mpl / mF
-CY = 1 / np.sqrt(45 * np.pi) / 512 * Mpl / mF
-CY_pBE = 1 / np.sqrt(45 * np.pi) / 512 * Mpl / mF
 
 Gam1 = lam_phi * m1 / 16 / np.pi # first scalar decay rate in GeV
 Gam2 = 0.004  # second scalar decay rate in GeV
 coeff = 2 * kappa**2 * mF**8 / m1**4 / m2**4 # coefficient in |M|^2
 barX_0 = 4 # barX = T_max / mF, starting moment for calculation
-h = -0.05 # barX step
+h = -0.015 # barX step
 barX_end = 0.1#0.1 # ending moment for calculation
 
 # Paths
@@ -152,7 +150,7 @@ if ACC == -3: # the worst approximation (simple algebraic computation)
     barXs_nodes = np.linspace(barX_end/10, barX_0, 50) # ascending order (first value possibly small)
     for barX in barXs_nodes:
         nodes_MB.append(barS_MB_ACC3(barX, m1, Gam1))
-    nodes_pBE = nodes_MB/np.tanh(m1/(4*mF*barXs_nodes))
+    nodes_pBE = nodes_MB/np.tanh(m1/(4*mF*barXs_nodes))/zeta_3**2
 else: # integration needed
     # Interpolate if flag is 1 or file does not exist
     if calc_interp == 1 or not os.path.isfile(file_nodes):
@@ -224,7 +222,7 @@ found = False
 for i, z in enumerate(z_odeint):
     Y_odeint.append(np.exp(-z) * Y_eq_BE(barX_odeint[i]))
     Y_eq.append(Y_eq_BE(barX_odeint[i]))
-    if found == False and np.exp(-z) <= 0.95: # 5% deviation
+    if found == False and np.exp(-z) <= 0.99: # 1% deviation
         found = True
         z_0 = z
         barX_0 = barX_odeint[i]

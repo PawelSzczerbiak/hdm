@@ -25,12 +25,13 @@
 x = ToExpression[$ScriptCommandLine[[2]]];
 ACC = ToExpression[$ScriptCommandLine[[3]]];
 m1 = ToExpression[$ScriptCommandLine[[4]]];
-Gam1 = 0.001*ToExpression[$ScriptCommandLine[[5]]];
+Gam1 = ToExpression[$ScriptCommandLine[[5]]];
 
 mF = 0.1056;  (* fermion (muon) mass in GeV *)
 mPi = 0.13957;  (* pion mass in GeV *)
 m2 = 125; (* second scalar mass (Higgs boson) in GeV *)
 Gam2 = 0.004; (* second scalar deacy rate in GeV *)
+zeta = 1.20205690315959429;
 
 alfa = m1^2*m2^2/(m2^2 - m1^2)^2/mF^4*(m1*Gam2 - m2*Gam1)^2;
 barS = m1^2/mF^2;
@@ -73,5 +74,7 @@ Which[
 	((1 - 4*mF^2/m1^2)^(3/2) + 1/27*(m1/mF)^2*(1 + 11/2*mPi^2/m1^2)^2*Sqrt[1 - 4*mPi^2/m1^2])*
 	(barS^2)/((barS - m2^2/mF^2)^2 + Gam2^2*m2^2/mF^4)*BesselK[1,x*Sqrt[barS]]
 	]
+
+res = res/zeta^2;
 
 Export["res_pBE_M_Weinberg.dat", Re[res]]
