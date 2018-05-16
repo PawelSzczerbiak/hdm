@@ -13,11 +13,12 @@ Approximations:
 
 Arguments:
 - scan: scan name
+- typ: statistics type e.g. BEBE, FDBE etc.
 - ACC: accuracy (important in Mathematica scripts)
 - lam_phi: self-coupling constant for phi field
 - kappa: coupling constant between phi and Higgs fields
 - m1: first scalar's mass in GeV
-- calc_interp: whether or not to perform interpolation for MB and pBE approximations
+- calc_interp: whether or not to perform interpolation for MB and pBE/pFD approximations
 - GG: (optional) whether to include backraction in g(x) function
 '''
 
@@ -38,12 +39,13 @@ start = timeit.default_timer()
 # Arguments
 
 scan = sys.argv[1]
-ACC = int(sys.argv[2])
-lam_phi = float(sys.argv[3])
-kappa = float(sys.argv[4])
-m1 = float(sys.argv[5])
-calc_interp = int(sys.argv[6])
-GG = sys.argv[7]
+typ = sys.argv[2]
+ACC = int(sys.argv[3])
+lam_phi = float(sys.argv[4])
+kappa = float(sys.argv[5])
+m1 = float(sys.argv[6])
+calc_interp = int(sys.argv[7])
+GG = sys.argv[8]
 
 # endings for result files
 file_nodes_info =join_line([m1, lam_phi, ACC], "_") # nodes
@@ -105,9 +107,9 @@ if GG == "GG":
     file_0 = "gg_interp_" + str(m1) + "_" + str(kappa) + "_" + str(lam_phi) + "_" + str(ACC)
     path_0 = dir_0 + file_0
     # backreaction = pd.read_csv(path_0, sep="\t", header=None)[1]
-    backreaction = read_columns_as_rows(path_0, [1])
+    backreaction = read_columns_as_rows(path_0, [1], ' ')
     # Add backreaction
-    if(backreaction):
+    if len(backreaction) == len(heff):
         heff += backreaction[0]
         geff += backreaction[0]
     else:
@@ -121,13 +123,13 @@ gs_fun = interp1d(temps[::-1], heff[::-1], kind='cubic')
 gs_der_over_gs_fun = interp1d(temps[::-1], gs_der_over_gs[::-1], kind='cubic')
 
 #=========================================
-# Interpolation for MB and pBE statistics
+# Interpolation for MB and pBE/pFD statistics
 #=========================================
 
-print("\nNodes calculation for MB and pBE statistics...")
+print("\nNodes calculation for MB and pBE/pFD statistics...")
 barXs_nodes = []
 nodes_MB = []
-nodes_pBE = []
+nodes_p = [] # pBE/pFD
 
 # barS in MB approximation for ACC = -3
 def barS_MB_ACC3(barX, m1, Gam1):
@@ -150,7 +152,10 @@ if ACC == -3: # the worst approximation (simple algebraic computation)
     barXs_nodes = np.linspace(barX_end/10, barX_0, 50) # ascending order (first value possibly small)
     for barX in barXs_nodes:
         nodes_MB.append(barS_MB_ACC3(barX, m1, Gam1))
-    nodes_pBE = nodes_MB/np.tanh(m1/(4*mF*barXs_nodes))/zeta_3**2
+    if typ in ("BEBE", "BEFD"):
+        nodes_p = nodes_MB/np.tanh(m1/(4*mF*barXs_nodes))/zeta_3**2
+    else:
+        nodes_p = nodes_MB*np.tanh(m1/(4*mF*barXs_nodes))/(zeta_3*3/4)**2
 else: # integration needed
     # Interpolate if flag is 1 or file does not exist
     if calc_interp == 1 or not os.path.isfile(file_nodes):
@@ -166,13 +171,14 @@ else: # integration needed
             os.system(command)
             with open(path_scripts+'res_MB_M_Weinberg.dat', 'r') as f:
                 nodes_MB.append((float(f.readline())))
-            # Mathematica script execution for pBE approximation
-            command = join_line(['cd', path_scripts, ';', './pBE_M_Weinberg', 1/barX, ACC, m1, Gam1])
+            # Mathematica script execution for pBE/pFD approximation
+            suf = "BE" if typ in ("BEBE", "BEFD") else "FD"
+            command = join_line(['cd', path_scripts, ';', './p'+suf+'_M_Weinberg', 1/barX, ACC, m1, Gam1])
             os.system(command)
-            with open(path_scripts+'res_pBE_M_Weinberg.dat', 'r') as f:
-                nodes_pBE.append((float(f.readline())))
+            with open(path_scripts+'res_p'+suf+'_M_Weinberg.dat', 'r') as f:
+                nodes_p.append((float(f.readline())))
 
-            params = [round(barX, 5), nodes_MB[-1], nodes_pBE[-1]]
+            params = [round(barX, 5), nodes_MB[-1], nodes_p[-1]]
             # Saving results
             file_append(file_nodes, params)
             print("%3d %10.2f %22.5f %22.5f" % (i, params[0], params[1], params[2]))
@@ -182,12 +188,12 @@ else: # integration needed
             elements = line.split(' ')
             barXs_nodes.append(float(elements[0]))
             nodes_MB.append(float(elements[1]))
-            nodes_pBE.append(float(elements[2]))
+            nodes_p.append(float(elements[2]))
 
 end_nodes = timeit.default_timer()
 
 barS_MB_interp = interp1d(barXs_nodes, nodes_MB, kind='cubic')
-barS_pBE_interp = interp1d(barXs_nodes, nodes_pBE, kind='cubic')
+barS_p_interp = interp1d(barXs_nodes, nodes_p, kind='cubic')
 
 print("-- Time: %5.2f s" % (end_nodes - start))
 
@@ -205,11 +211,18 @@ def Y_eq_BE(barX):
     ''' Y equilibrium for BE statistics '''
     return Y_eq_MB(barX) * zeta_3
 
+def Y_eq_FD(barX):
+    ''' Y equilibrium for FD statistics '''
+    return Y_eq_MB(barX) * zeta_3 * 3/4
+
 def fun_z_MB_odeint(z, barX):
     ''' z' = fun_z_MB_odeint(z,barX) '''
     return -gs_der_over_gs_fun(barX * mF) \
     + Cz_MB * m.sinh(z) / barX**5 * coeff * barS_MB_interp(barX) \
     * (1 + barX / 3 * gs_der_over_gs_fun(barX * mF)) / np.sqrt(g_fun(barX * mF))
+
+# Equilibrium function for Y
+Y_eq_FULL = Y_eq_BE if typ in ("BEBE", "BEFD") else Y_eq_FD
 
 z_0 = 0
 barX_odeint = np.linspace(barX_0, barX_end, 1000) # descending order
@@ -220,8 +233,8 @@ Y_eq = [] # equilibrium
 # Rough estimation of the starting point for RK4 solution
 found = False
 for i, z in enumerate(z_odeint):
-    Y_odeint.append(np.exp(-z) * Y_eq_BE(barX_odeint[i]))
-    Y_eq.append(Y_eq_BE(barX_odeint[i]))
+    Y_odeint.append(np.exp(-z) * Y_eq_FULL(barX_odeint[i]))
+    Y_eq.append(Y_eq_FULL(barX_odeint[i]))
     if found == False and np.exp(-z) <= 0.99: # 1% deviation
         found = True
         z_0 = z
@@ -233,18 +246,19 @@ print("BarX_0 = %.3f, z_0 = %.3f" % (barX_0, z_0))
 # RK4 solution for BEFD statistics
 #===================================
 
-print("\nRK4 solution for BEFD, MB, fBE, pBE...")
+print("\nRK4 solution for (BE)(FD), MB, fBE/fFD, pBE/pFD...")
 
 barXs = np.arange(barX_0, barX_end, h) # descending order
 
 class RK4_Solver(object):
     '''
     Class which solves Boltzmann equation for pseudopotential z(barX)
-    in S. Weinberg's model for BEFD case and MB, fBE, pBE approximations.
+    in S. Weinberg's model for (BE)(FD) case and MB, fBE/fFD, pBE/pFD approximations.
     Method: Runge-Kutta, 4th order.
     
     Parameters:
-    - ACC: accuracy for Mathematica script (BEFD)
+    - ACC: accuracy for Mathematica script (BE)(FD)
+    - typ: statistics type e.g. BEBE, FDBE etc.
     - m1: first scalar's mass in GeV
     - Gam1: first scalar's decay rate in GeV
     - barXs: array of barX's (barX = T / mF)
@@ -252,10 +266,11 @@ class RK4_Solver(object):
 
     Requires:
     - global parameters: mF, coeff, Cz, Cz_MB, path_scripts
-    - global functions: g_fun, gs_der_over_gs_fun, barS_MB_interp, barS_pBE_interp, Y_eq_MB, Y_eq_BE
+    - global functions: g_fun, gs_der_over_gs_fun, barS_MB_interp, barS_pBE_interp, Y_eq_MB, Y_eq_FULL
     '''
-    def __init__(self, ACC, m1, Gam1, barXs, z_0=0):
+    def __init__(self, ACC, typ, m1, Gam1, barXs, z_0=0):
         self.ACC = ACC
+        self.typ = typ
         self.m1 = m1
         self.Gam1 = Gam1
         self.barXs = barXs
@@ -266,11 +281,11 @@ class RK4_Solver(object):
     def calculate(self):
         '''
         Calculates pseudopotential z_, normalized relic density Y_ and Y_eq_
-        for BEFD, MB, fBE, fBE
+        for (BE)(FD), MB, fBE/fFD, pBE/pFD
         '''
         # first step
-        z_BE, z_MB, z_fBE, z_pBE = np.full(4, self.z_0)
-        self.z_ = [[z_BE, z_MB, z_fBE, z_pBE]]
+        z_FULL, z_MB, z_f, z_p = np.full(4, self.z_0)
+        self.z_ = [[z_FULL, z_MB, z_f, z_p]]
         self.Y_ = [self.calc_Y(self.z_[0], barXs[0])]
         # nex steps
         for i in range(len(self.barXs) - 1):
@@ -278,12 +293,12 @@ class RK4_Solver(object):
             barX_curr = self.barXs[i+1] # current step
             h = barX_curr - barX_prev
 
-            z_BE = self.calc_z(z_BE, barX_prev, h, self.calc_k_BEFD)
+            z_FULL = self.calc_z(z_FULL, barX_prev, h, self.calc_k_FULL)
             z_MB = self.calc_z(z_MB, barX_prev, h, self.calc_k_MB)
-            z_fBE = self.calc_z(z_fBE, barX_prev, h, self.calc_k_fBE)
-            z_pBE = self.calc_z(z_pBE, barX_prev, h, self.calc_k_pBE)
+            z_f = self.calc_z(z_f, barX_prev, h, self.calc_k_f)
+            z_p = self.calc_z(z_p, barX_prev, h, self.calc_k_p)
 
-            zs = [z_BE, z_MB, z_fBE, z_pBE]
+            zs = [z_FULL, z_MB, z_f, z_p]
             self.z_.append(zs)
 
             Ys = self.calc_Y(zs, barX_curr)
@@ -308,67 +323,79 @@ class RK4_Solver(object):
 
     def calc_Y(self, zs, barX):
         ''' Calculates Y values for a given zs array and barX''' 
-        Ys =[self.Y_BE(zs[0], barX)]
-        Ys.extend(np.multiply(np.exp(np.negative(zs[1:])), Y_eq_BE(barX)))
+        Ys =[self.Y_FULL(zs[0], barX)]
+        Ys.extend(np.multiply(np.exp(np.negative(zs[1:])), Y_eq_FULL(barX)))
         return Ys
 
-    def calc_k_BEFD(self, z, barX):
-        ''' Calculates k coefficient for BEFD '''
+    def calc_k_FULL(self, z, barX):
+        ''' Calculates k coefficient for (BE)(FD) '''
         if ACC == -3: # the worst approximation (simple algebraic computation)
             x = 1/barX
             alfa = m1**2*m2**2/(m2**2 - m1**2)**2/mF**4*(m1*Gam2 - m2*Gam1)**2
             if m1 <= 2*mP:
-                barS_BE = np.exp(-2*z)*x**4*m1**7*m2**4/mF**10/Gam1*np.pi*\
+                barS = np.exp(-2*z)*x**4*m1**7*m2**4/mF**10/Gam1*np.pi*\
                 (1 - 4*mF**2/m1**2)**(3/2)*(m1**4/mF**4 + alfa)/ \
                 ((m1**2/mF**2 - m2**2/mF**2)**2 + Gam2**2*m2**2/mF**4)*1/2/x*mF/m1*spec.kv(1, (m1*x)/mF)
             else:
                 # additional annihilation into pion pair
-                barS_BE = np.exp(-2*z)*x**4*m1**7*m2**4/mF**10/Gam1*np.pi*\
-                ((1 - 4*mF**2/m1**2)**(3/2) + 1/27*(m1/mF)**2*(1 + 11/2*mP**2/m1**2)**2* \
-                np.sqrt(1 - 4*mP**2/m1**2)/np.tanh((m1*x)/(4*mF))**2)*(m1**4/mF**4)/ \
-                ((m1**2/mF**2 - m2**2/mF**2)**2 + Gam2**2*m2**2/mF**4)*1/2/x*mF/m1*spec.kv(1, (m1*x)/mF)
+                if typ == "BEFD":
+                    barS = np.exp(-2*z)*x**4*m1**7*m2**4/mF**10/Gam1*np.pi*\
+                    ((1 - 4*mF**2/m1**2)**(3/2) + 1/27*(m1/mF)**2*(1 + 11/2*mP**2/m1**2)**2* \
+                    np.sqrt(1 - 4*mP**2/m1**2)/np.tanh((m1*x)/(4*mF))**2)*(m1**4/mF**4)/ \
+                    ((m1**2/mF**2 - m2**2/mF**2)**2 + Gam2**2*m2**2/mF**4)*1/2/x*mF/m1*spec.kv(1, (m1*x)/mF)
+                else: # FDBE
+                    barS = np.exp(-2*z)*x**4*m1**7*m2**4/mF**10/Gam1*np.pi*\
+                    ((1 - 4*mF**2/m1**2)**(3/2) + 1/27*(m1/mF)**2*(1 + 11/2*mP**2/m1**2)**2* \
+                    np.sqrt(1 - 4*mP**2/m1**2))*(m1**4/mF**4)/ \
+                    ((m1**2/mF**2 - m2**2/mF**2)**2 + Gam2**2*m2**2/mF**4)*1/2/x*mF/m1*spec.kv(1, (m1*x)/mF)
+            # additional rescaling for homogenous statistics
+            if typ == "BEBE":
+                barS /= np.tanh((m1*x)/(4*mF))**2   
+            elif typ == "FDFD":
+                barS *= np.tanh((m1*x)/(4*mF))**2   
         else: # intergration needed
             try:
                 # Mathematica script execution for BEFD
-                command = join_line(['cd', path_scripts, ';', './BEFD_M_Weinberg', 1/barX, z, self.ACC, self.m1, self.Gam1])
+                command = join_line(['cd', path_scripts, ';', './'+typ+'_M_Weinberg', 1/barX, z, self.ACC, self.m1, self.Gam1])
                 os.system(command)
-                with open(path_scripts+'res_BEFD_M_Weinberg.dat', 'r') as f: 
-                    barS_BE = (float(f.readline()))
+                with open(path_scripts+'res_'+typ+'_M_Weinberg.dat', 'r') as f: 
+                    barS = (float(f.readline()))
             except:
-                barS_BE = None
-        return self.fun_z_BE(z, barX, coeff * barS_BE) if barS_BE else 0
+                barS = None
+        return self.fun_z_FULL(z, barX, coeff * barS) if barS else 0
 
     def calc_k_MB(self, z, barX):
         ''' Calculates k coefficient for MB '''
         barS_MB = barS_MB_interp(barX)
         return self.fun_z_MB(z, barX, coeff * barS_MB)
 
-    def calc_k_fBE(self, z, barX):
-        ''' Calculates k coefficient for fBE '''
-        barS_fBE = barS_MB_interp(barX)
-        return self.fun_z_fBE(z, barX, coeff * barS_fBE)
+    def calc_k_f(self, z, barX):
+        ''' Calculates k coefficient for fBE/fFD '''
+        barS_f = barS_MB_interp(barX)
+        return self.fun_z_f(z, barX, coeff * barS_f)
 
-    def calc_k_pBE(self, z, barX):
-        ''' Calculates k coefficient for fBE '''
-        barS_pBE = barS_pBE_interp(barX)
-        return self.fun_z_pBE(z, barX, coeff * barS_pBE)
+    def calc_k_p(self, z, barX):
+        ''' Calculates k coefficient for pBE/pFD '''
+        barS_p = barS_p_interp(barX)
+        return self.fun_z_p(z, barX, coeff * barS_p)
         
-    def fun_z_BE(self, z, barX, barS_BE):
+    def fun_z_FULL(self, z, barX, barS):
         ''' 
-        z' = fun_z_BE(z, barX, barS_BE) 
-        BE is related to incoming particles
-        Function works for BEFD and BEBE statistics
+        z' = fun_z_FULL(z, barX, barS) 
         '''
-        return (-gs_der_over_gs_fun(barX * mF) / 3 / barX * self.barJ_BE(z, barX, 3) \
-        + Cz * barX / np.sqrt(g_fun(barX * mF)) * m.sinh(z) * barS_BE \
-        * (1 + barX / 3 * gs_der_over_gs_fun(barX * mF))) / self.barJ_BE(z, barX, 2)
+        return (-gs_der_over_gs_fun(barX * mF) / 3 / barX * self.barJ(z, barX, 3) \
+        + Cz * barX / np.sqrt(g_fun(barX * mF)) * m.sinh(z) * barS \
+        * (1 + barX / 3 * gs_der_over_gs_fun(barX * mF))) / self.barJ(z, barX, 2)
 
-    def barJ_BE(self, z, barX, n):
+    def barJ(self, z, barX, n):
         ''' 
-        Helper functon for fun_z_BE() function 
+        Helper functon for fun_z_FULL() function 
         Note: limit in the integral is arbitrary !!!!!!
         '''
-        integral = lambda y: barX**(n + 1) * y**n * np.exp(y) / (np.exp(y + z) - 1)**2
+        if typ in ("BEBE", "BEFD"):
+            integral = lambda y: barX**(n + 1) * y**n * np.exp(y) / (np.exp(y + z) - 1)**2
+        else:
+            integral = lambda y: barX**(n + 1) * y**n * np.exp(y) / (np.exp(y + z) + 1)**2
         return integrate.quad(integral, 0, 100)[0] # limit !!!!!!
 
     def fun_z_MB(self, z, barX, barS_MB):
@@ -377,28 +404,40 @@ class RK4_Solver(object):
         + Cz_MB * m.sinh(z) / barX**5 * barS_MB \
         * (1 + barX / 3 * gs_der_over_gs_fun(barX * mF)) / np.sqrt(g_fun(barX * mF))
 
-    def fun_z_fBE(self, z, barX, barS_MB):
-        ''' z' = fun_z_fBE(z, barX, barS_MB) '''
-        return -gs_der_over_gs_fun(barX * mF) \
-        + Cz_MB * m.sinh(z) / barX**5 * barS_MB * zeta_3 \
-        * (1 + barX / 3 * gs_der_over_gs_fun(barX * mF)) / np.sqrt(g_fun(barX * mF))
+    def fun_z_f(self, z, barX, barS_MB):
+        ''' z' = fun_z_f(z, barX, barS_MB) '''
+        if typ in ("BEBE", "BEFD"):
+            return -gs_der_over_gs_fun(barX * mF) \
+            + Cz_MB * m.sinh(z) / barX**5 * barS_MB * zeta_3 \
+            * (1 + barX / 3 * gs_der_over_gs_fun(barX * mF)) / np.sqrt(g_fun(barX * mF))
+        else:
+            return -gs_der_over_gs_fun(barX * mF) \
+            + Cz_MB * m.sinh(z) / barX**5 * barS_MB * zeta_3 * 3/4 \
+            * (1 + barX / 3 * gs_der_over_gs_fun(barX * mF)) / np.sqrt(g_fun(barX * mF))
 
-    def fun_z_pBE(self, z, barX, barS_pBE):
-        ''' z' = fun_z_pBE(z, barX, barS_pBE) '''
-        return -gs_der_over_gs_fun(barX * mF) \
-        + Cz_MB * m.sinh(z) / barX**5 * barS_pBE * zeta_3 \
-        * (1 + barX / 3 * gs_der_over_gs_fun(barX * mF)) / np.sqrt(g_fun(barX * mF))
+    def fun_z_p(self, z, barX, barS_p):
+        ''' z' = fun_z_p(z, barX, barS_p) '''
+        if typ in ("BEBE", "BEFD"):
+            return -gs_der_over_gs_fun(barX * mF) \
+            + Cz_MB * m.sinh(z) / barX**5 * barS_p * zeta_3 \
+            * (1 + barX / 3 * gs_der_over_gs_fun(barX * mF)) / np.sqrt(g_fun(barX * mF))
+        else:
+            return -gs_der_over_gs_fun(barX * mF) \
+            + Cz_MB * m.sinh(z) / barX**5 * barS_p * zeta_3 * 3/4 \
+            * (1 + barX / 3 * gs_der_over_gs_fun(barX * mF)) / np.sqrt(g_fun(barX * mF))
 
-    def Y_BE(self, z, barX): 
+    def Y_FULL(self, z, barX): 
         '''
-        Y(z) for BE statistics 
-        Function works for BEFD and BEBE statistics
+        Y(z) for (BE)(FD) statistics 
         Note: limit in the integral is arbitrary !!!!!!
         '''
-        integral = lambda y: y**2 / (np.exp(y + z) - 1)
+        if typ in ("BEBE", "BEFD"):
+            integral = lambda y: y**2 / (np.exp(y + z) - 1)
+        else:
+            integral = lambda y: y**2 / (np.exp(y + z) + 1)
         return Y_eq_MB(barX) / 2 * integrate.quad(integral, 0, 100)[0]
 
-S = RK4_Solver(ACC, m1, Gam1, barXs, z_0)
+S = RK4_Solver(ACC, typ, m1, Gam1, barXs, z_0)
 S.calculate()
 z_RK4 = S.z_
 Y_RK4 = S.Y_
@@ -411,10 +450,10 @@ print("-- Time: %5.2f s" % (end_RK4 - end_nodes))
 #=======
 
 # z
-plt.plot(barXs, [z[0] for z in z_RK4], color='red', label=r'$z_{\rm BEFD}$')
+plt.plot(barXs, [z[0] for z in z_RK4], color='red', label=r'$z_{\rm FULL}$')
 plt.plot(barXs, [z[1] for z in z_RK4], color='blue', label=r'$z_{\rm MB}$')
-plt.plot(barXs, [z[2] for z in z_RK4], color='magenta', label=r'$z_{\rm fBE}$')
-plt.plot(barXs, [z[3] for z in z_RK4], color='green', label=r'$z_{\rm pBE}$')
+plt.plot(barXs, [z[2] for z in z_RK4], color='magenta', label=r'$z_{\rm f}$')
+plt.plot(barXs, [z[3] for z in z_RK4], color='green', label=r'$z_{\rm p}$')
 plt.xlabel(r'$\bar{x}=T/m_F$')
 plt.ylabel(r'$z$')
 plt.legend(loc='upper right')
@@ -424,10 +463,10 @@ plt.close()
 # Y
 plt.plot(barX_odeint, Y_eq, color='grey', label=r'$Y_{\rm eq}$')
 plt.plot(barX_odeint, Y_odeint, color='cyan', label=r'$Y_{\rm odeint}$')
-plt.plot(barXs, [Y[0] for Y in Y_RK4], color='red', label=r'$Y_{\rm BEFD}$')
+plt.plot(barXs, [Y[0] for Y in Y_RK4], color='red', label=r'$Y_{\rm FULL}$')
 plt.plot(barXs, [Y[1] for Y in Y_RK4], color='blue', label=r'$Y_{\rm MB}$')
-plt.plot(barXs, [Y[2] for Y in Y_RK4], color='magenta', label=r'$Y_{\rm fBE}$')
-plt.plot(barXs, [Y[3] for Y in Y_RK4], color='green', label=r'$Y_{\rm pBE}$')
+plt.plot(barXs, [Y[2] for Y in Y_RK4], color='magenta', label=r'$Y_{\rm f}$')
+plt.plot(barXs, [Y[3] for Y in Y_RK4], color='green', label=r'$Y_{\rm p}$')
 plt.xlabel(r'$\bar{x}=T/m_F$')
 plt.ylabel(r'$Y$')
 plt.legend(loc='upper right')

@@ -6,6 +6,7 @@ Script performs scan over m1 and kappa parameters in Weinberg's model
 
 Arguments:
 - scan: scan name
+- typ: statistics type e.g. BEBE, FDBE etc.
 - ACC: accuracy (important in Mathematica scripts)
 - lam_phi: self-coupling constant for phi field
 - GG: (optional) whether to include backraction in g(x) function
@@ -23,9 +24,10 @@ start = timeit.default_timer()
 # Arguments
 
 scan = sys.argv[1]
-ACC = int(sys.argv[2])
-lam_phi = float(sys.argv[3])
-GG = sys.argv[4] if len(sys.argv) == 5 else 'none'
+typ = sys.argv[2]
+ACC = int(sys.argv[3])
+lam_phi = float(sys.argv[4])
+GG = sys.argv[5] if len(sys.argv) == 6 else 'none'
 
 # Paths
 
@@ -54,7 +56,7 @@ for m1 in m1_vec:
         kappa = round(kappa, 8)
         # Perform calculation
         print("\n\nScan for m1 = %s, kappa = %s" % (m1, kappa))
-        command = join_line(["python RK4-solver.py", scan, ACC, lam_phi, kappa, m1, calc_interp, GG])
+        command = join_line(["python RK4-solver.py", scan, typ, ACC, lam_phi, kappa, m1, calc_interp, GG])
         os.system(command)
         # Update info file
         file_append(file_info, [calc_interp, kappa, m1, lam_phi, ACC])
