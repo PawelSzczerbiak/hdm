@@ -1,7 +1,7 @@
 # HDM
 Python scripts that calculate hot dark matter relic density in [S. Weinberg's model](https://arxiv.org/pdf/1305.1971.pdf) 
 for two Goldstone bosons annihilationg into muon/pion pairs, using the method proposed by 
-[Dolgov & Kainulainen](https://www.sciencedirect.com/science/article/pii/0550321393906467?via%3Dihub). 
+[Dolgov & Kainulainen](https://www.sciencedirect.com/science/article/pii/0550321393906467?via%3Dihub). Detailed analysis and physical implications may be found in the following [paper](https://link.springer.com/content/pdf/10.1140%2Fepjc%2Fs10052-018-6195-0.pdf).   
 
 Execution time of the sample scan: ~16 sec ( i5-3210M CPU, 8GB RAM, Ubuntu 16.04 64bit). 
 
